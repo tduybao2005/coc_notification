@@ -33,7 +33,7 @@ Tiếng ting được tạo bằng code, không có vấn đề bản quyền. T
 npm run ting
 ```
 
-Tạo lại `public/sounds/voice.wav` bằng Piper 1.8 với giọng `vi_VN-vais1000-medium`, `SynthesisConfig(length_scale=1.0, volume=0.9)`, câu `Có công trình vừa hoàn thành.`, rồi thêm 0,25 giây im lặng ở mỗi đầu để loa và tai nghe Bluetooth không nuốt mất chữ đầu. File hiện có là bản người dùng đã nghe và duyệt.
+Tạo lại `public/sounds/voice.wav` bằng Piper 1.8 với giọng `vi_VN-vais1000-medium`, `SynthesisConfig(length_scale=1.0, volume=0.9)`, câu `Có công trình vừa hoàn thành.`, rồi thêm 0,25 giây im lặng ở mỗi đầu để loa và tai nghe Bluetooth không nuốt mất chữ đầu.
 
 ## Phát triển
 

@@ -206,7 +206,7 @@ Hành vi:
 - Bật `banner`: nếu quyền chưa cấp thì gọi `requestBannerPermission`. Không được cấp thì công tắc tắt lại và hiện `banner-denied`. Các công tắc khác lưu ngay khi đổi.
 - Nút `Thử` gọi `fireAlert` với `title: 'Thử thông báo'`, `body: 'Village Timer'`, dùng các kiểu đang bật. Nếu không bật kiểu nào thì không làm gì.
 - Khối `details` tự mở một lần khi tài khoản đầu tiên được thêm vào máy mà cả bốn công tắc đang tắt. Đây là gợi ý sau lần dán đầu tiên.
-- `needs-tap` được kiểm tra lại khi `pointerdown` hoặc `keydown` trên `document`. `hasUserActivation` là `true` thì cảnh báo biến mất.
+- `needs-tap` được kiểm tra lại khi `pointerdown`, `pointerup` hoặc `keydown` trên `document`. `hasUserActivation` là `true` thì cảnh báo biến mất. Cần cả `pointerup` vì khi chạm trên điện thoại, Chrome báo `hasBeenActive` là `false` lúc `pointerdown` và chỉ thành `true` lúc `pointerup`. Chỉ gỡ riêng phần tử cảnh báo, không render lại, để không làm mất cú bấm vào các nút ở phía trên.
 - `banner-denied` biến mất ở lần đổi công tắc tiếp theo. `sound-failed` biến mất khi lần phát sau thành công.
 
 Footer thêm dòng liên kết tới giấy phép giọng đọc: `Giọng đọc: Piper, dữ liệu VAIS-1000 (CC BY).`

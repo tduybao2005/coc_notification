@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import { STORAGE_KEY, loadState, type KeyValueStore } from '../src/core/store';
+import { DEFAULT_SETTINGS, loadSettings, type AlertSettings } from '../src/core/settings';
+import type { AlertOutput } from '../src/platform/alert-output';
 import { mountApp, type AppDeps } from '../src/ui/app';
-import { memoryStore } from './helpers';
+import { fakeOutput, memoryStore } from './helpers';
 
 const sample = readFileSync('tests/fixtures/export.sample.json', 'utf8');
 const T = 1793895122;
@@ -10,12 +12,16 @@ const flush = () => vi.advanceTimersByTimeAsync(0);
 let unmount: (() => void) | undefined;
 let store: KeyValueStore;
 
-async function setup(clockMs: number, opts: { clip?: AppDeps['readClipboard']; store?: KeyValueStore } = {}) {
+async function setup(clockMs: number, opts: {
+  clip?: AppDeps['readClipboard']; store?: KeyValueStore; settings?: AlertSettings; output?: AlertOutput;
+} = {}) {
   document.body.innerHTML = '<div id="app"></div>';
   const useStore = opts.store ?? store;
   const deps: AppDeps = {
     store: useStore,
     loaded: await loadState(useStore),
+    settings: opts.settings ?? await loadSettings(useStore),
+    output: opts.output ?? fakeOutput(),
     now: () => Date.now(),
     readClipboard: opts.clip ?? (async () => sample),
   };
@@ -170,4 +176,330 @@ test('unreadable saved data asks for a new paste, and a good paste clears it', a
   await flush();
   expect(root.querySelector('[data-notice="unreadable"]')).toBeNull();
   expect(rows(root)).toHaveLength(13);
+});
+
+const on = (over: Partial<AlertSettings>): AlertSettings => ({ ...DEFAULT_SETTINGS, ...over });
+const all = on({ banner: true, vibrate: true, ting: true, voice: true });
+const twoJobs = JSON.stringify({ tag: '#TEST123', timestamp: T, buildings: [
+  { data: 1000026, lvl: 1, timer: 100 }, { data: 1000059, lvl: 1, timer: 100 }] });
+const oneJob = JSON.stringify({ tag: '#TEST123', timestamp: T, buildings: [{ data: 1000026, lvl: 1, timer: 100 }] });
+const staggered = async () => JSON.stringify({ tag: '#TEST123', timestamp: T, buildings: [
+  { data: 1000026, lvl: 1, timer: 100 }, { data: 1000059, lvl: 1, timer: 103 }] });
+const notice = (root: HTMLElement, kind: string) => root.querySelector(`[data-notice="${kind}"]`);
+const input = (root: HTMLElement, name: string) => root.querySelector(`input[name="${name}"]`) as HTMLInputElement;
+const summary = (root: HTMLElement) => root.querySelector('details[data-role="alerts"] summary')!.textContent!;
+
+async function pasted(clockMs: number, opts: Parameters<typeof setup>[1] = {}) {
+  const root = await setup(clockMs, opts);
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  return root;
+}
+
+test('a job reaching its end fires the enabled kinds once, in order', async () => {
+  const output = fakeOutput();
+  await pasted((T + 54757) * 1000, { output, settings: all });
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(output.calls).toEqual(['banner:Workshop đã xong', 'vibrate', 'ting', 'voice']);
+});
+
+test('only the enabled kinds fire', async () => {
+  const output = fakeOutput();
+  await pasted((T + 54757) * 1000, { output, settings: on({ ting: true }) });
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(output.calls).toEqual(['ting']);
+});
+
+test('jobs ending in the same tick fire once', async () => {
+  const output = fakeOutput();
+  await pasted((T + 98) * 1000, { output, settings: on({ banner: true }), clip: async () => twoJobs });
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(output.calls).toEqual(['banner:2 hạng mục đã xong']);
+});
+
+test('jobs finished before opening stay quiet', async () => {
+  const shared = memoryStore();
+  await pasted((T + 54800) * 1000, { store: shared });
+  unmount!();
+  const output = fakeOutput();
+  await setup((T + 54810) * 1000, { store: shared, output, settings: all });
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(output.calls).toEqual([]);
+});
+
+test('an account not on screen still alerts', async () => {
+  let clip = sample;
+  const output = fakeOutput();
+  const root = await pasted((T + 54757) * 1000, { output, settings: on({ banner: true }), clip: async () => clip });
+  clip = JSON.stringify({ tag: '#OTHER1', timestamp: T, buildings: [{ data: 1000026, lvl: 1, timer: 999999 }] });
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(output.calls).toEqual(['banner:Workshop đã xong']);
+});
+
+test('a page resumed after a long pause alerts once for everything it missed', async () => {
+  const output = fakeOutput();
+  await pasted((T + 44000) * 1000, { output, settings: on({ banner: true }) });
+  vi.setSystemTime((T + 60000) * 1000);
+  document.dispatchEvent(new Event('visibilitychange'));
+  await flush();
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(output.calls).toEqual(['banner:2 hạng mục đã xong']);
+});
+
+test('a deleted account no longer alerts', async () => {
+  const output = fakeOutput();
+  const root = await pasted((T + 54757) * 1000, { output, settings: all });
+  click(root, 'button[data-action="delete"]');
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(output.calls).toEqual([]);
+});
+
+test('a later alert does not play over a sound, and the next one plays once it ends', async () => {
+  let plays = 0;
+  let release!: (ok: boolean) => void;
+  const output = fakeOutput({ play: () => { plays += 1; return new Promise((r) => { release = r; }); } });
+  const clip = async () => JSON.stringify({ tag: '#TEST123', timestamp: T, buildings: [
+    { data: 1000026, lvl: 1, timer: 100 }, { data: 1000059, lvl: 1, timer: 103 }, { data: 1000067, lvl: 1, timer: 109 }] });
+  await pasted((T + 98) * 1000, { output, settings: on({ banner: true, voice: true }), clip });
+  await vi.advanceTimersByTimeAsync(7000);
+  expect(plays).toBe(1);
+  expect(output.calls).toEqual(['banner:Dark Barracks đã xong', 'banner:Workshop đã xong']);
+  release(true);
+  await flush();
+  await vi.advanceTimersByTimeAsync(6000);
+  expect(plays).toBe(2);
+});
+
+test('pasting again does not alert twice', async () => {
+  const output = fakeOutput();
+  const root = await pasted((T + 54757) * 1000, { output, settings: on({ banner: true }) });
+  await vi.advanceTimersByTimeAsync(5000);
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(output.calls).toEqual(['banner:Workshop đã xong']);
+});
+
+test('a sound that fails shows a notice, the next success clears it', async () => {
+  const results = [false, true];
+  const output = fakeOutput({ play: async () => results.shift()! });
+  const root = await pasted((T + 98) * 1000, { output, settings: on({ ting: true }), clip: staggered });
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(notice(root, 'sound-failed')).not.toBeNull();
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(notice(root, 'sound-failed')).toBeNull();
+});
+
+test('a failed ting stays reported even when the voice plays', async () => {
+  const output = fakeOutput({ play: async (sound) => sound === 'voice' });
+  const root = await pasted((T + 98) * 1000, { output, settings: on({ ting: true, voice: true }), clip: async () => oneJob });
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(notice(root, 'sound-failed')).not.toBeNull();
+});
+
+test('a hung banner does not block the sounds', async () => {
+  const output = fakeOutput({ showBanner: () => new Promise(() => {}) });
+  await pasted((T + 98) * 1000, { output, settings: on({ banner: true, ting: true }), clip: async () => oneJob });
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(output.calls).toContain('ting');
+});
+
+test('settings are saved and restored', async () => {
+  const root = await setup(T * 1000);
+  click(root, 'input[name="alert-voice"]');
+  await flush();
+  expect((await loadSettings(store)).voice).toBe(true);
+  unmount!();
+  const again = await setup(T * 1000);
+  expect(input(again, 'alert-voice').checked).toBe(true);
+});
+
+test('rapid clicks keep the last state', async () => {
+  const root = await setup(T * 1000);
+  for (let i = 0; i < 3; i += 1) click(root, 'input[name="alert-ting"]');
+  await flush();
+  expect((await loadSettings(store)).ting).toBe(true);
+});
+
+test('refused permission turns the switch back off', async () => {
+  const output = fakeOutput({ bannerPermission: () => 'default', requestBannerPermission: async () => 'denied' });
+  const root = await setup(T * 1000, { output });
+  click(root, 'input[name="alert-banner"]');
+  await flush();
+  expect(input(root, 'alert-banner').checked).toBe(false);
+  expect(input(root, 'alert-banner').disabled).toBe(false);
+  expect((await loadSettings(store)).banner).toBe(false);
+  expect(notice(root, 'banner-denied')).not.toBeNull();
+});
+
+test('unsupported notifications never ask', async () => {
+  const request = vi.fn(async () => 'granted' as const);
+  const output = fakeOutput({ bannerPermission: () => 'unsupported', requestBannerPermission: request });
+  const root = await setup(T * 1000, { output });
+  click(root, 'input[name="alert-banner"]');
+  await flush();
+  expect(request).not.toHaveBeenCalled();
+  expect(notice(root, 'banner-denied')).not.toBeNull();
+});
+
+test('granted permission turns the switch on', async () => {
+  const output = fakeOutput({ bannerPermission: () => 'default', requestBannerPermission: async () => 'granted' });
+  const root = await setup(T * 1000, { output });
+  click(root, 'input[name="alert-banner"]');
+  await flush();
+  expect(input(root, 'alert-banner').checked).toBe(true);
+  expect((await loadSettings(store)).banner).toBe(true);
+});
+
+test('already granted permission turns the switch on without asking', async () => {
+  const request = vi.fn(async () => 'granted' as const);
+  const root = await setup(T * 1000, { output: fakeOutput({ requestBannerPermission: request }) });
+  click(root, 'input[name="alert-banner"]');
+  await flush();
+  expect(request).not.toHaveBeenCalled();
+  expect((await loadSettings(store)).banner).toBe(true);
+});
+
+test('the banner switch is locked while the prompt is open, and the denied notice clears on the next change', async () => {
+  let answer!: (p: 'denied') => void;
+  const output = fakeOutput({
+    bannerPermission: () => 'default',
+    requestBannerPermission: () => new Promise((r) => { answer = r; }),
+  });
+  const root = await setup(T * 1000, { output });
+  click(root, 'input[name="alert-banner"]');
+  expect(input(root, 'alert-banner').disabled).toBe(true);
+  answer('denied');
+  await flush();
+  expect(input(root, 'alert-banner').disabled).toBe(false);
+  expect(notice(root, 'banner-denied')).not.toBeNull();
+  click(root, 'input[name="alert-ting"]');
+  expect(notice(root, 'banner-denied')).toBeNull();
+});
+
+test('permission revoked since last time shows as off', async () => {
+  const output = fakeOutput({ bannerPermission: () => 'denied' });
+  const root = await setup(T * 1000, { output, settings: on({ banner: true }) });
+  expect(input(root, 'alert-banner').checked).toBe(false);
+  expect(summary(root)).toContain('Đang tắt');
+});
+
+test('a failed settings save shows the storage notice', async () => {
+  const root = await setup(T * 1000, { store: memoryStore({}, { failWrites: true }) });
+  click(root, 'input[name="alert-ting"]');
+  await flush();
+  expect(notice(root, 'storage')).not.toBeNull();
+  expect(input(root, 'alert-ting').checked).toBe(true);
+});
+
+test('the summary follows the switches', async () => {
+  const root = await setup(T * 1000);
+  expect(summary(root)).toContain('Đang tắt');
+  click(root, 'input[name="alert-ting"]');
+  expect(summary(root)).toContain('Đang bật');
+});
+
+test('all-finished notice ignores helpers', async () => {
+  const clip = async () => JSON.stringify({
+    tag: '#TEST123', timestamp: T, buildings: [{ data: 1000026, lvl: 1, timer: 100 }],
+    helpers: [{ data: 93000000, lvl: 1, helper_cooldown: 5000 }],
+  });
+  const root = await pasted((T + 500) * 1000, { clip });
+  expect(notice(root, 'all-finished')).not.toBeNull();
+});
+
+test('all-finished appears when the last job ends', async () => {
+  const root = await pasted((T + 98) * 1000, { clip: async () => oneJob });
+  expect(notice(root, 'all-finished')).toBeNull();
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(notice(root, 'all-finished')).not.toBeNull();
+});
+
+test('needs-tap shows until the user touches the app', async () => {
+  let active = false;
+  const output = fakeOutput({ hasUserActivation: () => active });
+  const root = await setup(T * 1000, { output, settings: on({ voice: true }) });
+  expect(notice(root, 'needs-tap')).not.toBeNull();
+  active = true;
+  document.dispatchEvent(new Event('pointerdown'));
+  expect(notice(root, 'needs-tap')).toBeNull();
+});
+
+test('needs-tap clears on a touch tap, where activation arrives at pointerup', async () => {
+  let active = false;
+  const output = fakeOutput({ hasUserActivation: () => active });
+  const root = await setup(T * 1000, { output, settings: on({ vibrate: true }) });
+  document.dispatchEvent(new Event('pointerdown'));
+  expect(notice(root, 'needs-tap')).not.toBeNull();
+  active = true;
+  document.dispatchEvent(new Event('pointerup'));
+  expect(notice(root, 'needs-tap')).toBeNull();
+});
+
+test('clearing needs-tap keeps the buttons in place', async () => {
+  let active = false;
+  let clip = sample;
+  const output = fakeOutput({ hasUserActivation: () => active });
+  const root = await pasted((T + 807) * 1000, { output, settings: on({ ting: true }), clip: async () => clip });
+  clip = JSON.stringify({ tag: '#OTHER1', timestamp: T, buildings: [{ data: 1000026, lvl: 1, timer: 5000 }] });
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  const tab = root.querySelector('button[data-tag]')!;
+  expect(notice(root, 'needs-tap')).not.toBeNull();
+  active = true;
+  document.dispatchEvent(new Event('pointerdown'));
+  expect(notice(root, 'needs-tap')).toBeNull();
+  expect(tab.isConnected).toBe(true);
+});
+
+test('no needs-tap when only the banner is on', async () => {
+  const output = fakeOutput({ hasUserActivation: () => false });
+  const root = await setup(T * 1000, { output, settings: on({ banner: true }) });
+  expect(notice(root, 'needs-tap')).toBeNull();
+});
+
+test('details opens after the first paste only', async () => {
+  let clip = sample;
+  const root = await setup((T + 807) * 1000, { clip: async () => clip });
+  const details = root.querySelector('details[data-role="alerts"]') as HTMLDetailsElement;
+  expect(details.open).toBe(false);
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  expect(details.open).toBe(true);
+  details.open = false;
+  clip = JSON.stringify({ tag: '#OTHER1', timestamp: T, buildings: [] });
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  expect(details.open).toBe(false);
+});
+
+test('the test button fires the enabled kinds', async () => {
+  const output = fakeOutput();
+  const root = await setup(T * 1000, { output, settings: on({ ting: true }) });
+  click(root, 'button[data-action="test-alert"]');
+  await flush();
+  expect(output.calls).toEqual(['ting']);
+});
+
+test('the test button does nothing when all are off', async () => {
+  const output = fakeOutput();
+  const root = await setup(T * 1000, { output });
+  click(root, 'button[data-action="test-alert"]');
+  await flush();
+  expect(output.calls).toEqual([]);
+});
+
+test('the footer credits the voice', async () => {
+  const root = await setup(T * 1000);
+  expect(root.querySelector('footer a[href="licenses/vais1000-voice.txt"]')).not.toBeNull();
+});
+
+test('nothing fires after unmount', async () => {
+  const output = fakeOutput();
+  await pasted((T + 54757) * 1000, { output, settings: all });
+  unmount!();
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(output.calls).toEqual([]);
 });
