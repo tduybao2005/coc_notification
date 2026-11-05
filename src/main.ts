@@ -1,3 +1,4 @@
+import { registerSW } from 'virtual:pwa-register';
 import './ui/style.css';
 import { mountApp } from './ui/app';
 
@@ -6,3 +7,5 @@ mountApp(document.getElementById('app')!, {
   now: Date.now,
   readClipboard: () => navigator.clipboard.readText(),
 });
+
+registerSW({ immediate: true });

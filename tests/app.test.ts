@@ -27,6 +27,7 @@ test('first visit shows how to export and the legal footer', () => {
   expect(root.querySelector('[data-role="help"]')!.textContent).toContain('Data Export');
   expect(root.querySelector('footer')!.textContent).toContain('not endorsed by Supercell');
   expect(root.querySelector('footer')!.textContent).toContain('Dữ liệu chỉ lưu trên máy này');
+  expect(root.querySelector('footer a')!.getAttribute('href')).toBe('licenses/clash-of-clans-data.txt');
 });
 
 test('pasting shows every job with remaining time and end time', async () => {

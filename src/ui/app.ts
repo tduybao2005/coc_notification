@@ -38,11 +38,10 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   controls.append(pasteButton, box);
 
   const footer = el('footer');
-  footer.append(
-    el('p', {}, copy.privacy),
-    el('p', {}, copy.disclaimer),
-    el('p', { 'data-role': 'credit' }, copy.credit),
-  );
+  const credit = el('p');
+  // Relative href so the link also works when the app is served from a sub-path (GitHub Pages).
+  credit.append(el('a', { href: 'licenses/clash-of-clans-data.txt' }, copy.credit));
+  footer.append(el('p', {}, copy.privacy), el('p', {}, copy.disclaimer), credit);
 
   root.replaceChildren(el('h1', {}, copy.title), top, controls, list, footer);
 
