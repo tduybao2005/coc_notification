@@ -99,3 +99,21 @@ test('removing the active account selects another or none', () => {
   expect(one.activeTag).toBe('#A');
   expect(removeVillage(one, '#A')).toEqual(emptyState());
 });
+
+test('a damaged old copy is reported, kept readable accounts are returned, and nothing is moved', async () => {
+  const raw = JSON.stringify({ villages: { '#A': v('#A', 1), '#B': { tag: 'wrong' } }, activeTag: '#A' });
+  const legacy = legacyWith(raw);
+  const s = memoryStore();
+  const { state, unreadable } = await loadState(s, () => legacy);
+  expect(Object.keys(state.villages)).toEqual(['#A']);
+  expect(unreadable).toBe(true);
+  expect(legacy.getItem(STORAGE_KEY)).toBe(raw);
+  expect(await s.get(STORAGE_KEY)).toBeNull();
+});
+
+test('an old copy that is not JSON is reported and kept', async () => {
+  const legacy = legacyWith('{broken');
+  const result = await loadState(memoryStore(), () => legacy);
+  expect(result).toEqual({ state: emptyState(), unreadable: true });
+  expect(legacy.getItem(STORAGE_KEY)).toBe('{broken');
+});

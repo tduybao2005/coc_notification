@@ -44,8 +44,9 @@ function parseState(raw: string): LoadResult {
   }
 }
 
-// Data written by the localStorage version of the app. Only a fully readable copy is moved; the old
-// copy is removed once the store holds it, and left alone if the write fails or the copy is damaged.
+// Data written by the localStorage version of the app. A fully readable copy is moved; the old copy is
+// removed once the store holds it, and left alone if the write fails. A damaged copy is neither moved
+// nor removed: its readable accounts are returned with unreadable set so the app asks for a new paste.
 // Merely touching localStorage can throw in browsers that block storage, so every access is guarded.
 async function migrateLegacy(store: KeyValueStore, getLegacy: () => Storage): Promise<LoadResult> {
   const none: LoadResult = { state: emptyState(), unreadable: false };
@@ -59,7 +60,7 @@ async function migrateLegacy(store: KeyValueStore, getLegacy: () => Storage): Pr
   }
   if (raw === null) return none;
   const parsed = parseState(raw);
-  if (parsed.unreadable) return none;
+  if (parsed.unreadable) return parsed;
   try {
     await store.set(STORAGE_KEY, raw);
     legacy.removeItem(STORAGE_KEY);
