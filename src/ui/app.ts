@@ -102,8 +102,10 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   const needsTap = (): boolean =>
     (settings.voice || settings.ting || settings.vibrate) && !deps.output.hasUserActivation();
 
-  // Removes only the notice node. A full render() would replace the tab and delete buttons between
-  // pointerdown and the click that follows, and lose that click.
+  // Runs on click and keydown only. On touch, activation arrives at pointerup, and removing the notice
+  // any earlier shifts everything below it up a line before the click lands, so the first press hits
+  // the wrong element. By click time the target has already been hit. Removes only the notice node:
+  // a full render() would also replace the tab and delete buttons.
   const recheckActivation = (): void => {
     if (!needsTap()) top.querySelector('[data-notice="needs-tap"]')?.remove();
   };
@@ -328,8 +330,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   pasteButton.addEventListener('click', onPasteClick);
   box.addEventListener('input', onInput);
   document.addEventListener('visibilitychange', tick);
-  // A touch tap reports no activation at pointerdown but does at pointerup, so listen to both.
-  for (const type of ['pointerdown', 'pointerup', 'keydown']) document.addEventListener(type, recheckActivation);
+  for (const type of ['click', 'keydown']) document.addEventListener(type, recheckActivation);
   const timer = setInterval(tick, 1000);
 
   render();
@@ -338,7 +339,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
     disposed = true;
     clearInterval(timer);
     document.removeEventListener('visibilitychange', tick);
-    for (const type of ['pointerdown', 'pointerup', 'keydown']) document.removeEventListener(type, recheckActivation);
+    for (const type of ['click', 'keydown']) document.removeEventListener(type, recheckActivation);
     root.removeEventListener('click', onClick);
     pasteButton.removeEventListener('click', onPasteClick);
     box.removeEventListener('input', onInput);

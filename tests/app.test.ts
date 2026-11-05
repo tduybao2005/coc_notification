@@ -423,18 +423,21 @@ test('needs-tap shows until the user touches the app', async () => {
   const root = await setup(T * 1000, { output, settings: on({ voice: true }) });
   expect(notice(root, 'needs-tap')).not.toBeNull();
   active = true;
-  document.dispatchEvent(new Event('pointerdown'));
+  document.dispatchEvent(new Event('click'));
   expect(notice(root, 'needs-tap')).toBeNull();
 });
 
-test('needs-tap clears on a touch tap, where activation arrives at pointerup', async () => {
+test('needs-tap stays during a press and clears on the click that follows', async () => {
   let active = false;
   const output = fakeOutput({ hasUserActivation: () => active });
   const root = await setup(T * 1000, { output, settings: on({ vibrate: true }) });
-  document.dispatchEvent(new Event('pointerdown'));
-  expect(notice(root, 'needs-tap')).not.toBeNull();
+  // Activation arrives at pointerup on touch. The notice must stay until the click: removing it
+  // earlier would shift the layout under the finger before the click lands.
   active = true;
+  document.dispatchEvent(new Event('pointerdown'));
   document.dispatchEvent(new Event('pointerup'));
+  expect(notice(root, 'needs-tap')).not.toBeNull();
+  document.dispatchEvent(new Event('click'));
   expect(notice(root, 'needs-tap')).toBeNull();
 });
 
@@ -449,7 +452,7 @@ test('clearing needs-tap keeps the buttons in place', async () => {
   const tab = root.querySelector('button[data-tag]')!;
   expect(notice(root, 'needs-tap')).not.toBeNull();
   active = true;
-  document.dispatchEvent(new Event('pointerdown'));
+  document.dispatchEvent(new Event('click'));
   expect(notice(root, 'needs-tap')).toBeNull();
   expect(tab.isConnected).toBe(true);
 });

@@ -96,7 +96,7 @@ footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid var(--line);
 footer a { color: inherit; }
 
 [data-role="alerts"] { margin: 16px 0; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
-[data-role="alerts"] summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+[data-role="alerts"] summary { display: list-item; min-height: 44px; padding: 10px 0; cursor: pointer; }
 [data-role="alerts"] .switch { display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; }
 [data-role="alerts"] .switch span { min-width: 0; overflow-wrap: anywhere; }
 [data-role="alerts"] input[type="checkbox"] { flex: none; width: 22px; height: 22px; margin: 0; accent-color: var(--accent); }
