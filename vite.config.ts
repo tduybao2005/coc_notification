@@ -6,7 +6,11 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'licenses/clash-of-clans-data.txt'],
+      includeAssets: [
+        'favicon.ico', 'apple-touch-icon-180x180.png', 'licenses/clash-of-clans-data.txt',
+        'sounds/voice.wav', 'sounds/ting.wav', 'licenses/vais1000-voice.txt',
+      ],
+      workbox: { importScripts: ['sw-notifications.js'] },
       manifest: {
         name: 'Village Timer',
         short_name: 'Village Timer',

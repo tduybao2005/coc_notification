@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "check": "tsc --noEmit",
-    "names": "node scripts/build-names.mjs"
+    "names": "node scripts/build-names.mjs",
+    "ting": "node scripts/build-ting.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

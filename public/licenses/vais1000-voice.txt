@@ -1,0 +1,11 @@
+Voice clip: public/sounds/voice.wav
+
+This file is synthetic speech generated with Piper using the voice vi_VN-vais1000-medium. It is not a
+recording taken from the dataset.
+
+The voice was trained on the VAIS-1000 Vietnamese Speech Synthesis Corpus.
+DOI: 10.21227/H2B887
+https://ieee-dataport.org/documents/vais-1000-vietnamese-speech-synthesis-corpus
+
+Licence: Creative Commons Attribution 4.0 (CC BY 4.0)
+https://creativecommons.org/licenses/by/4.0/
