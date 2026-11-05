@@ -148,7 +148,10 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
       if (target && target.textContent !== text) target.textContent = text;
     }
     const village = active();
-    if (village && accountLine) accountLine.textContent = accountText(village);
+    if (village && accountLine) {
+      const text = accountText(village);
+      if (accountLine.textContent !== text) accountLine.textContent = text;
+    }
     if (finished !== finishedCount) render();
   }
 

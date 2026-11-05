@@ -142,3 +142,15 @@ test('failed save warns but still shows the data', async () => {
   expect(rows(root)).toHaveLength(13);
   expect(root.querySelector('[data-notice="storage"]')).not.toBeNull();
 });
+
+test('ticking leaves the account line untouched while its text is unchanged', async () => {
+  const root = setup((T + 807) * 1000);
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  const span = root.querySelector('.account span')!;
+  const node = span.firstChild;
+  const text = span.textContent;
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(span.textContent).toBe(text);
+  expect(span.firstChild).toBe(node);
+});

@@ -1,4 +1,4 @@
-import { STORAGE_KEY, emptyState, loadState, saveState, upsertVillage, removeVillage } from '../src/core/store';
+import { STORAGE_KEY, emptyState, loadState, openStorage, saveState, upsertVillage, removeVillage } from '../src/core/store';
 import type { Village } from '../src/core/types';
 
 const v = (tag: string, exportedAt: number): Village => ({ tag, exportedAt, jobs: [], hasBoosts: false });
@@ -49,4 +49,15 @@ test('removing the active account selects another or none', () => {
   const one = removeVillage(start, '#B');
   expect(one.activeTag).toBe('#A');
   expect(removeVillage(one, '#A')).toEqual(emptyState());
+});
+
+test('blocked storage gives an empty state and a failed save instead of throwing', () => {
+  const s = openStorage(() => { throw new Error('SecurityError'); });
+  expect(loadState(s)).toEqual(emptyState());
+  expect(saveState(s, emptyState())).toBe(false);
+});
+
+test('working storage is returned unchanged', () => {
+  const s = memory();
+  expect(openStorage(() => s)).toBe(s);
 });

@@ -64,3 +64,16 @@ export function removeVillage(state: AppState, tag: string): AppState {
   const activeTag = state.activeTag === tag ? (Object.keys(villages)[0] ?? null) : state.activeTag;
   return { villages, activeTag };
 }
+
+// Browsers that block storage throw on the `localStorage` access itself; fall back to a stand-in
+// that behaves like an empty storage whose writes fail, so the app can show its storage notice.
+export function openStorage(get: () => Storage): Storage {
+  try {
+    return get();
+  } catch {
+    return {
+      getItem: () => null,
+      setItem: () => { throw new Error('storage unavailable'); },
+    } as unknown as Storage;
+  }
+}
