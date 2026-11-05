@@ -157,7 +157,7 @@ export interface AlertOutput {
   requestBannerPermission(): Promise<BannerPermission>;
   hasUserActivation(): boolean;
 }
-export function browserAlertOutput(baseUrl: string): AlertOutput;
+export function browserAlertOutput(baseUrl: string, makeAudio?: (src: string) => HTMLAudioElement): AlertOutput;
 ```
 
 `src/ui/app.ts` chỉ biết `AlertOutput`, nhờ đó test dùng bản giả và Phần 2 thay bằng bản Android.
@@ -173,9 +173,9 @@ Nhiều mục xong trong cùng một tick chỉ gọi `fireAlert` một lần. N
 
 Chi tiết `browserAlertOutput`:
 
-- Âm thanh dùng `HTMLAudioElement`, tải từ `{baseUrl}sounds/voice.wav` và `{baseUrl}sounds/ting.wav`.
+- Âm thanh dùng `HTMLAudioElement`, tải từ `{baseUrl}sounds/voice.wav` và `{baseUrl}sounds/ting.wav`. `play` có giới hạn 10 giây để một âm thanh treo không chặn các lần báo sau.
 - Rung dùng `navigator.vibrate([200, 100, 200])`. Thiếu API thì trả `false`.
-- `showBanner` lấy registration bằng `navigator.serviceWorker.getRegistration()` rồi gọi `showNotification` với `body`, `icon` và `tag: 'village-timer-finished'`. Không có registration hoặc không có quyền thì trả `false`.
+- `showBanner` lấy registration bằng `navigator.serviceWorker.getRegistration()` rồi gọi `showNotification` với `body`, `icon`, `tag: 'village-timer-finished'` và `renotify: true`; thiếu `renotify` thì lần báo sau sẽ âm thầm thay thông báo cũ. Không có registration hoặc không có quyền thì trả `false`.
 - `hasUserActivation` đọc `navigator.userActivation.hasBeenActive`. Trình duyệt không có API này thì trả `true`.
 
 Bấm vào thông báo phải mở app, giống thông báo tin nhắn. Thêm `public/sw-notifications.js` xử lý `notificationclick`: đóng thông báo, focus cửa sổ app đang mở, nếu không có thì mở `registration.scope`. Nạp vào service worker bằng `workbox.importScripts`.
@@ -266,7 +266,8 @@ export interface AppDeps {
 | `src/core/alerts.ts` | Mới |
 | `src/platform/indexeddb-store.ts` | Mới |
 | `src/platform/alert-output.ts` | Mới |
-| `src/ui/app.ts` | Thêm bảng thông báo, `fireAlert`, các cảnh báo mới |
+| `src/ui/alerts-panel.ts` | Mới, dựng khối `details` |
+| `src/ui/app.ts` | Nối bảng thông báo, `fireAlert`, các cảnh báo mới |
 | `src/ui/copy.ts`, `src/ui/style.css` | Thêm văn bản và giao diện |
 | `src/main.ts` | Khởi động bất đồng bộ |
 | `public/sw-notifications.js` | Mới |
