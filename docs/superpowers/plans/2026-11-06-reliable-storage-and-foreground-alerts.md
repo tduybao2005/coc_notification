@@ -292,7 +292,7 @@ git commit -m "feat: add alert settings and finished-job detection"
 ### Task 3: Âm thanh và phát tín hiệu
 
 **Files:**
-- Create: `src/platform/alert-output.ts`, `public/sw-notifications.js`, `public/sounds/voice.wav`, `public/sounds/ting.wav`, `public/licenses/vais1000-voice.txt`, `scripts/build-ting.mjs`
+- Create: `src/platform/alert-output.ts`, `public/sw-notifications.js`, `public/sounds/ting.wav`, `public/licenses/vais1000-voice.txt`, `scripts/build-ting.mjs`
 - Modify: `package.json`, `vite.config.ts`, `README.md`
 - Test: `tests/alert-output.test.ts`, `tests/sounds.test.ts`
 
@@ -337,17 +337,7 @@ Expected: FAIL vì module và file âm thanh chưa tồn tại.
 
 `scripts/build-ting.mjs` ghi `public/sounds/ting.wav`: 22050 Hz, mono, 16-bit, dài 0,6 giây, gồm sóng sine 1318,5 Hz cộng hoạ âm 2637 Hz với biên độ 0,3, tắt dần theo hàm mũ `exp(-6t)`, đỉnh 0,8. Thêm script `"ting": "node scripts/build-ting.mjs"` vào `package.json` rồi chạy `npm run ting`.
 
-Tạo giọng nói trong thư mục tạm, chạy bằng Bash. Lệnh này đã chạy thử trên máy, ra file 1,28 giây, 56 KB, mono, 16-bit, 22050 Hz:
-
-```bash
-WORK=$(mktemp -d)
-python -m venv "$WORK/venv"
-"$WORK/venv/Scripts/python" -m pip install --quiet piper-tts
-base=https://huggingface.co/rhasspy/piper-voices/resolve/main/vi/vi_VN/vais1000/medium
-curl -sSL -o "$WORK/vi_VN-vais1000-medium.onnx" "$base/vi_VN-vais1000-medium.onnx"
-curl -sSL -o "$WORK/vi_VN-vais1000-medium.onnx.json" "$base/vi_VN-vais1000-medium.onnx.json"
-PYTHONUTF8=1 "$WORK/venv/Scripts/python" -m piper -m "$WORK/vi_VN-vais1000-medium.onnx" -f public/sounds/voice.wav -- 'Có công trình vừa hoàn thành.'
-```
+`public/sounds/voice.wav` đã có sẵn trong repo. Đây là đúng file người dùng đã nghe và duyệt, nên không tạo lại và không sửa.
 
 Viết `public/licenses/vais1000-voice.txt` gồm: file là giọng tổng hợp bằng Piper với giọng `vi_VN-vais1000-medium`, không phải bản ghi từ bộ dữ liệu; bộ dữ liệu VAIS-1000 Vietnamese Speech Synthesis Corpus; DOI `10.21227/H2B887`; liên kết `https://ieee-dataport.org/documents/vais-1000-vietnamese-speech-synthesis-corpus`; giấy phép Creative Commons Attribution, `https://creativecommons.org/licenses/by/4.0/`.
 
@@ -359,7 +349,7 @@ Theo spec mục 5. Mỗi âm thanh một phần tử tạo sẵn, `preload = 'au
 
 - `public/sw-notifications.js` theo spec mục 5.
 - `vite.config.ts`: thêm `sounds/voice.wav`, `sounds/ting.wav`, `licenses/vais1000-voice.txt` vào `includeAssets`, và `workbox: { importScripts: ['sw-notifications.js'] }`.
-- `README.md`: thêm mục Thông báo, gồm giới hạn chỉ báo khi app đang mở, lệnh tạo hai file âm thanh và nguồn giọng đọc.
+- `README.md`: thêm mục Thông báo, gồm giới hạn chỉ báo khi app đang mở, nguồn giọng đọc, lệnh `npm run ting`, và cách tạo giọng: Piper 1.8 với `vi_VN-vais1000-medium`, `SynthesisConfig(length_scale=1.0, volume=0.9)`, thêm 0,25 giây im lặng ở mỗi đầu.
 
 - [ ] **Step 5: Chạy test**
 

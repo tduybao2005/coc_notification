@@ -52,8 +52,6 @@ Các điểm khác:
 ## Giả định chưa kiểm chứng
 
 - IndexedDB trên Android cũng giữ được dữ liệu khi app bị tắt đột ngột. Sẽ kiểm tra khi có thiết bị thật ở Phần 2.
-- Chất lượng giọng máy đọc đủ nghe được. Người dùng nghe file trước khi merge; nếu không đạt thì quay lại chọn nguồn giọng khác.
-- Piper cài và chạy được trên máy này. Nếu không, dùng bản phát hành dựng sẵn của Piper. File giọng chỉ tạo một lần, nên không ảnh hưởng tới code của app.
 
 ## Thiết kế
 
@@ -215,7 +213,7 @@ Footer thêm dòng liên kết tới giấy phép giọng đọc: `Giọng đọ
 
 ### 7. File âm thanh
 
-- `public/sounds/voice.wav`: câu `Có công trình vừa hoàn thành.`, tạo bằng Piper với giọng `vi_VN-vais1000-medium`.
+- `public/sounds/voice.wav`: câu `Có công trình vừa hoàn thành.`, tạo bằng Piper với giọng `vi_VN-vais1000-medium`, `length_scale=1.0`, `volume=0.9`, thêm 0,25 giây im lặng ở mỗi đầu để loa và tai nghe Bluetooth không nuốt mất chữ đầu. Người dùng đã nghe và duyệt file này ngày 2026-11-06.
 - `public/sounds/ting.wav`: `scripts/build-ting.mjs` tạo sóng sine có độ tắt dần, khoảng 0,6 giây, nên không có vấn đề bản quyền.
 - Cả hai đều là WAV PCM 16-bit mono, không cần công cụ chuyển đổi và Android dùng được ở Phần 2. Mỗi file không quá 150 KB.
 - `public/licenses/vais1000-voice.txt` ghi tên bộ dữ liệu, DOI, giấy phép và câu nói rõ file là giọng tổng hợp, không phải bản ghi gốc.
@@ -309,5 +307,4 @@ Kiểm tra trên Chrome thật, bản build production dưới đường dẫn `
 
 Người dùng kiểm tra:
 
-- Nghe `voice.wav` và chấp nhận chất lượng trước khi merge.
 - Thử trên Android thật: bật các công tắc, bấm `Thử`, giữ app mở chờ một mục xong.
