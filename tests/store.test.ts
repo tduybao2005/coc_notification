@@ -1,28 +1,77 @@
-import { STORAGE_KEY, emptyState, loadState, openStorage, saveState, upsertVillage, removeVillage } from '../src/core/store';
+import { STORAGE_KEY, emptyState, loadState, saveState, upsertVillage, removeVillage, type AppState } from '../src/core/store';
 import type { Village } from '../src/core/types';
+import { memoryStore } from './helpers';
 
 const v = (tag: string, exportedAt: number): Village => ({ tag, exportedAt, jobs: [], hasBoosts: false });
-const memory = (): Storage => {
-  const m = new Map<string, string>();
-  return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, x: string) => void m.set(k, x) } as Storage;
+const legacyWith = (raw: string | null) => {
+  let value = raw;
+  return { getItem: () => value, removeItem: () => { value = null; } } as unknown as Storage;
 };
+const saved = (state: AppState) => JSON.stringify(state);
 
-test('round-trips through storage', () => {
-  const s = memory();
+test('round-trips through the store', async () => {
+  const s = memoryStore();
   const { state } = upsertVillage(emptyState(), v('#A', 10));
-  expect(saveState(s, state)).toBe(true);
-  expect(loadState(s)).toEqual(state);
+  expect(await saveState(s, state)).toBe(true);
+  expect(await loadState(s)).toEqual({ state, unreadable: false });
 });
 
-test.each(['{broken', '{"villages":5}', 'null'])('corrupt storage %s gives empty state', (raw) => {
-  const s = memory();
-  s.setItem(STORAGE_KEY, raw);
-  expect(loadState(s)).toEqual(emptyState());
+test('an empty store is not an error', async () => {
+  expect(await loadState(memoryStore())).toEqual({ state: emptyState(), unreadable: false });
 });
 
-test('reports a failed write instead of throwing', () => {
-  const s = { setItem() { throw new Error('quota'); } } as unknown as Storage;
-  expect(saveState(s, emptyState())).toBe(false);
+test.each(['{broken', '{"villages":5}', 'null'])('corrupt data %s is reported', async (raw) => {
+  expect(await loadState(memoryStore({ [STORAGE_KEY]: raw }))).toEqual({ state: emptyState(), unreadable: true });
+});
+
+test('keeps readable accounts and reports the rest', async () => {
+  const raw = JSON.stringify({ villages: { '#A': v('#A', 1), '#B': { tag: 'wrong' } }, activeTag: '#B' });
+  const { state, unreadable } = await loadState(memoryStore({ [STORAGE_KEY]: raw }));
+  expect(Object.keys(state.villages)).toEqual(['#A']);
+  expect(state.activeTag).toBe('#A');
+  expect(unreadable).toBe(true);
+});
+
+test('a failed read is reported', async () => {
+  expect((await loadState(memoryStore({}, { failReads: true }))).unreadable).toBe(true);
+});
+
+test('a failed write returns false', async () => {
+  expect(await saveState(memoryStore({}, { failWrites: true }), emptyState())).toBe(false);
+});
+
+test('unreadable data stays in the store until the next save', async () => {
+  const s = memoryStore({ [STORAGE_KEY]: '{broken' });
+  await loadState(s);
+  expect(await s.get(STORAGE_KEY)).toBe('{broken');
+});
+
+test('moves old localStorage data across, then removes it', async () => {
+  const raw = saved(upsertVillage(emptyState(), v('#A', 1)).state);
+  const legacy = legacyWith(raw);
+  const s = memoryStore();
+  expect((await loadState(s, () => legacy)).state.activeTag).toBe('#A');
+  expect(await s.get(STORAGE_KEY)).toBe(raw);
+  expect(legacy.getItem(STORAGE_KEY)).toBeNull();
+});
+
+test('keeps old data when moving it fails', async () => {
+  const raw = saved(upsertVillage(emptyState(), v('#A', 1)).state);
+  const legacy = legacyWith(raw);
+  const result = await loadState(memoryStore({}, { failWrites: true }), () => legacy);
+  expect(result.state.activeTag).toBe('#A');
+  expect(legacy.getItem(STORAGE_KEY)).toBe(raw);
+});
+
+test('store data wins over old localStorage data', async () => {
+  const current = saved(upsertVillage(emptyState(), v('#NEW', 2)).state);
+  const legacy = legacyWith(saved(upsertVillage(emptyState(), v('#OLD', 1)).state));
+  expect((await loadState(memoryStore({ [STORAGE_KEY]: current }), () => legacy)).state.activeTag).toBe('#NEW');
+});
+
+test('blocked localStorage is ignored', async () => {
+  const result = await loadState(memoryStore(), () => { throw new Error('SecurityError'); });
+  expect(result).toEqual({ state: emptyState(), unreadable: false });
 });
 
 test('a second account keeps the first and becomes active', () => {
@@ -49,15 +98,4 @@ test('removing the active account selects another or none', () => {
   const one = removeVillage(start, '#B');
   expect(one.activeTag).toBe('#A');
   expect(removeVillage(one, '#A')).toEqual(emptyState());
-});
-
-test('blocked storage gives an empty state and a failed save instead of throwing', () => {
-  const s = openStorage(() => { throw new Error('SecurityError'); });
-  expect(loadState(s)).toEqual(emptyState());
-  expect(saveState(s, emptyState())).toBe(false);
-});
-
-test('working storage is returned unchanged', () => {
-  const s = memory();
-  expect(openStorage(() => s)).toBe(s);
 });

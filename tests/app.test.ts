@@ -1,15 +1,24 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
+import { STORAGE_KEY, loadState, type KeyValueStore } from '../src/core/store';
 import { mountApp, type AppDeps } from '../src/ui/app';
+import { memoryStore } from './helpers';
 
 const sample = readFileSync('tests/fixtures/export.sample.json', 'utf8');
 const T = 1793895122;
 const flush = () => vi.advanceTimersByTimeAsync(0);
 let unmount: (() => void) | undefined;
+let store: KeyValueStore;
 
-function setup(clockMs: number, clip: AppDeps['readClipboard'] = async () => sample, storage = window.localStorage) {
+async function setup(clockMs: number, opts: { clip?: AppDeps['readClipboard']; store?: KeyValueStore } = {}) {
   document.body.innerHTML = '<div id="app"></div>';
-  const deps: AppDeps = { storage, now: () => Date.now(), readClipboard: clip };
+  const useStore = opts.store ?? store;
+  const deps: AppDeps = {
+    store: useStore,
+    loaded: await loadState(useStore),
+    now: () => Date.now(),
+    readClipboard: opts.clip ?? (async () => sample),
+  };
   vi.setSystemTime(clockMs);
   unmount = mountApp(document.getElementById('app')!, deps);
   return document.getElementById('app')!;
@@ -19,11 +28,11 @@ const rows = (root: HTMLElement) => [...root.querySelectorAll('li[data-ends-at]'
 const row = (root: HTMLElement, name: string) => rows(root).find((r) => r.textContent!.includes(name))!;
 const remaining = (r: Element) => r.querySelector('.job-remaining')!.textContent;
 
-beforeEach(() => { vi.useFakeTimers(); window.localStorage.clear(); });
+beforeEach(() => { vi.useFakeTimers(); store = memoryStore(); });
 afterEach(() => { unmount?.(); vi.useRealTimers(); });
 
-test('first visit shows how to export and the legal footer', () => {
-  const root = setup(T * 1000);
+test('first visit shows how to export and the legal footer', async () => {
+  const root = await setup(T * 1000);
   expect(root.querySelector('[data-role="help"]')!.textContent).toContain('Data Export');
   expect(root.querySelector('footer')!.textContent).toContain('not endorsed by Supercell');
   expect(root.querySelector('footer')!.textContent).toContain('Dữ liệu chỉ lưu trên máy này');
@@ -31,7 +40,7 @@ test('first visit shows how to export and the legal footer', () => {
 });
 
 test('pasting shows every job with remaining time and end time', async () => {
-  const root = setup((T + 807) * 1000);
+  const root = await setup((T + 807) * 1000);
   click(root, 'button[data-action="paste"]');
   await flush();
   expect(rows(root)).toHaveLength(13);
@@ -43,7 +52,7 @@ test('pasting shows every job with remaining time and end time', async () => {
 });
 
 test('remaining time ticks every second', async () => {
-  const root = setup((T + 807) * 1000);
+  const root = await setup((T + 807) * 1000);
   click(root, 'button[data-action="paste"]');
   await flush();
   expect(remaining(row(root, 'Workshop'))).toBe('14 giờ 59 phút 12 giây');
@@ -52,17 +61,17 @@ test('remaining time ticks every second', async () => {
 });
 
 test('reopening restores data, and finished jobs stay visible', async () => {
-  let root = setup((T + 807) * 1000);
+  let root = await setup((T + 807) * 1000);
   click(root, 'button[data-action="paste"]');
   await flush();
   unmount!();
-  root = setup((T + 30 * 86400) * 1000);
+  root = await setup((T + 30 * 86400) * 1000);
   expect(rows(root)).toHaveLength(13);
   expect(rows(root).every((r) => remaining(r) === 'Đã xong')).toBe(true);
 });
 
 test('job moves to the end of its group when it finishes', async () => {
-  const root = setup((T + 54750) * 1000);
+  const root = await setup((T + 54750) * 1000);
   click(root, 'button[data-action="paste"]');
   await flush();
   const first = () => root.querySelector('li[data-ends-at] .job-name')!.textContent;
@@ -72,7 +81,7 @@ test('job moves to the end of its group when it finishes', async () => {
 });
 
 test('clipboard denied explains and manual paste still works', async () => {
-  const root = setup((T + 807) * 1000, async () => { throw new Error('denied'); });
+  const root = await setup((T + 807) * 1000, { clip: async () => { throw new Error('denied'); } });
   click(root, 'button[data-action="paste"]');
   await flush();
   expect(root.querySelector('[data-notice="error"]')!.textContent).toContain('nhấn giữ');
@@ -85,7 +94,7 @@ test('clipboard denied explains and manual paste still works', async () => {
 
 test('bad paste keeps existing data and shows the reason', async () => {
   let clip = sample;
-  const root = setup((T + 807) * 1000, async () => clip);
+  const root = await setup((T + 807) * 1000, { clip: async () => clip });
   click(root, 'button[data-action="paste"]');
   await flush();
   clip = sample.slice(0, 500);
@@ -97,7 +106,7 @@ test('bad paste keeps existing data and shows the reason', async () => {
 
 test('older export is not applied and says so', async () => {
   let clip = sample;
-  const root = setup((T + 900) * 1000, async () => clip);
+  const root = await setup((T + 900) * 1000, { clip: async () => clip });
   click(root, 'button[data-action="paste"]');
   await flush();
   clip = JSON.stringify({ ...JSON.parse(sample), timestamp: T - 500, buildings: [] });
@@ -109,7 +118,7 @@ test('older export is not applied and says so', async () => {
 
 test('second account gets a tab, switching and deleting work', async () => {
   let clip = sample;
-  const root = setup((T + 807) * 1000, async () => clip);
+  const root = await setup((T + 807) * 1000, { clip: async () => clip });
   click(root, 'button[data-action="paste"]');
   await flush();
   expect(root.querySelectorAll('button[data-tag]')).toHaveLength(0);
@@ -126,7 +135,7 @@ test('second account gets a tab, switching and deleting work', async () => {
 
 test('shows boost, clock and no-job notices', async () => {
   const clip = JSON.stringify({ tag: '#TEST123', timestamp: T, boosts: { any: 1 } });
-  const root = setup((T - 600) * 1000, async () => clip);
+  const root = await setup((T - 600) * 1000, { clip: async () => clip });
   click(root, 'button[data-action="paste"]');
   await flush();
   expect(root.querySelector('[data-notice="boost"]')).not.toBeNull();
@@ -135,8 +144,7 @@ test('shows boost, clock and no-job notices', async () => {
 });
 
 test('failed save warns but still shows the data', async () => {
-  const storage = { getItem: () => null, setItem() { throw new Error('quota'); } } as unknown as Storage;
-  const root = setup((T + 807) * 1000, async () => sample, storage);
+  const root = await setup((T + 807) * 1000, { store: memoryStore({}, { failWrites: true }) });
   click(root, 'button[data-action="paste"]');
   await flush();
   expect(rows(root)).toHaveLength(13);
@@ -144,7 +152,7 @@ test('failed save warns but still shows the data', async () => {
 });
 
 test('ticking leaves the account line untouched while its text is unchanged', async () => {
-  const root = setup((T + 807) * 1000);
+  const root = await setup((T + 807) * 1000);
   click(root, 'button[data-action="paste"]');
   await flush();
   const span = root.querySelector('.account span')!;
@@ -153,4 +161,13 @@ test('ticking leaves the account line untouched while its text is unchanged', as
   await vi.advanceTimersByTimeAsync(1000);
   expect(span.textContent).toBe(text);
   expect(span.firstChild).toBe(node);
+});
+
+test('unreadable saved data asks for a new paste, and a good paste clears it', async () => {
+  const root = await setup((T + 807) * 1000, { store: memoryStore({ [STORAGE_KEY]: '{broken' }) });
+  expect(root.querySelector('[data-notice="unreadable"]')!.textContent).toContain('dán lại');
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  expect(root.querySelector('[data-notice="unreadable"]')).toBeNull();
+  expect(rows(root)).toHaveLength(13);
 });

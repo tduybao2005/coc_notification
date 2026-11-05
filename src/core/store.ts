@@ -18,29 +18,71 @@ const isVillage = (value: unknown): value is Village =>
   && typeof value.hasBoosts === 'boolean'
   && Array.isArray(value.jobs);
 
-export function loadState(storage: Storage): AppState {
+export interface KeyValueStore {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+}
+export interface LoadResult { state: AppState; unreadable: boolean }
+
+function parseState(raw: string): LoadResult {
   try {
-    const raw = storage.getItem(STORAGE_KEY);
-    if (raw === null) return emptyState();
     const data: unknown = JSON.parse(raw);
-    if (!isRecord(data) || !isRecord(data.villages)) return emptyState();
+    if (!isRecord(data) || !isRecord(data.villages)) return { state: emptyState(), unreadable: true };
     const villages: Record<string, Village> = {};
+    let dropped = false;
     for (const [tag, village] of Object.entries(data.villages)) {
       if (isVillage(village) && village.tag === tag) villages[tag] = village;
+      else dropped = true;
     }
     const tags = Object.keys(villages);
     const activeTag = typeof data.activeTag === 'string' && Object.hasOwn(villages, data.activeTag)
       ? data.activeTag
       : (tags[0] ?? null);
-    return { villages, activeTag };
+    return { state: { villages, activeTag }, unreadable: dropped };
   } catch {
-    return emptyState();
+    return { state: emptyState(), unreadable: true };
   }
 }
 
-export function saveState(storage: Storage, state: AppState): boolean {
+// Data written by the localStorage version of the app. Only a fully readable copy is moved; the old
+// copy is removed once the store holds it, and left alone if the write fails or the copy is damaged.
+// Merely touching localStorage can throw in browsers that block storage, so every access is guarded.
+async function migrateLegacy(store: KeyValueStore, getLegacy: () => Storage): Promise<LoadResult> {
+  const none: LoadResult = { state: emptyState(), unreadable: false };
+  let legacy: Storage;
+  let raw: string | null;
   try {
-    storage.setItem(STORAGE_KEY, JSON.stringify(state));
+    legacy = getLegacy();
+    raw = legacy.getItem(STORAGE_KEY);
+  } catch {
+    return none;
+  }
+  if (raw === null) return none;
+  const parsed = parseState(raw);
+  if (parsed.unreadable) return none;
+  try {
+    await store.set(STORAGE_KEY, raw);
+    legacy.removeItem(STORAGE_KEY);
+  } catch {
+    // Keep the old copy; the data read from it is still returned.
+  }
+  return parsed;
+}
+
+export async function loadState(store: KeyValueStore, getLegacy?: () => Storage): Promise<LoadResult> {
+  let raw: string | null;
+  try {
+    raw = await store.get(STORAGE_KEY);
+  } catch {
+    return { state: emptyState(), unreadable: true };
+  }
+  if (raw !== null) return parseState(raw);
+  return getLegacy ? migrateLegacy(store, getLegacy) : { state: emptyState(), unreadable: false };
+}
+
+export async function saveState(store: KeyValueStore, state: AppState): Promise<boolean> {
+  try {
+    await store.set(STORAGE_KEY, JSON.stringify(state));
     return true;
   } catch {
     return false;
@@ -63,17 +105,4 @@ export function removeVillage(state: AppState, tag: string): AppState {
   delete villages[tag];
   const activeTag = state.activeTag === tag ? (Object.keys(villages)[0] ?? null) : state.activeTag;
   return { villages, activeTag };
-}
-
-// Browsers that block storage throw on the `localStorage` access itself; fall back to a stand-in
-// that behaves like an empty storage whose writes fail, so the app can show its storage notice.
-export function openStorage(get: () => Storage): Storage {
-  try {
-    return get();
-  } catch {
-    return {
-      getItem: () => null,
-      setItem: () => { throw new Error('storage unavailable'); },
-    } as unknown as Storage;
-  }
 }

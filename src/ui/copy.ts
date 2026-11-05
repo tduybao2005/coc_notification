@@ -21,6 +21,7 @@ export const copy = {
   notice: {
     'kept-newer': 'Dữ liệu vừa dán cũ hơn bản đang lưu nên app giữ bản mới hơn.',
     storage: 'Không lưu được trên máy này. Dữ liệu sẽ mất khi đóng app.',
+    unreadable: 'Không đọc được một phần dữ liệu đã lưu. Hãy dán lại dữ liệu từ game.',
     boost: 'Lúc xuất đang có boost nên có thể xong sớm hơn giờ hiển thị.',
     clock: 'Đồng hồ máy đang chậm hơn giờ game. Hãy chỉnh lại giờ của máy để thời gian còn lại chính xác.',
   },

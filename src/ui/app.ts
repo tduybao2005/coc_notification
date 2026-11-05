@@ -1,13 +1,20 @@
 import { jobName } from '../core/names';
 import { parseExport } from '../core/parse';
-import { loadState, removeVillage, saveState, upsertVillage, type AppState } from '../core/store';
+import {
+  removeVillage, saveState, upsertVillage, type AppState, type KeyValueStore, type LoadResult,
+} from '../core/store';
 import {
   deviceClockBehind, formatAgo, formatEnd, formatRemaining, groupJobs, remainingSeconds,
 } from '../core/time';
 import type { Village } from '../core/types';
 import { copy } from './copy';
 
-export interface AppDeps { storage: Storage; now: () => number; readClipboard: () => Promise<string> }
+export interface AppDeps {
+  store: KeyValueStore;
+  loaded: LoadResult;
+  now: () => number;
+  readClipboard: () => Promise<string>;
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K, attrs: Record<string, string> = {}, text?: string,
@@ -19,11 +26,13 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
-  let state: AppState = loadState(deps.storage);
+  let state: AppState = deps.loaded.state;
   // Messages describing the last user action; cleared when the next action starts.
   let errorText: string | null = null;
   let keptNewer = false;
   let storageFailed = false;
+  let unreadable = deps.loaded.unreadable;
+  let disposed = false;
   let finishedCount = 0;
   let accountLine: HTMLElement | null = null;
 
@@ -52,8 +61,14 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   };
   const notice = (kind: string, text: string) => el('p', { 'data-notice': kind, role: 'status' }, text);
 
+  // Saves without waiting, so the screen never stalls on storage. The notice appears or clears when
+  // the result arrives, and only a change in the result triggers a redraw.
   function persist(): void {
-    storageFailed = !saveState(deps.storage, state);
+    void saveState(deps.store, state).then((ok) => {
+      if (disposed || storageFailed === !ok) return;
+      storageFailed = !ok;
+      render();
+    });
   }
 
   function resetMessages(): void {
@@ -91,6 +106,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
     if (errorText !== null) topNodes.push(notice('error', errorText));
     if (keptNewer) topNodes.push(notice('kept-newer', copy.notice['kept-newer']));
     if (storageFailed) topNodes.push(notice('storage', copy.notice.storage));
+    if (unreadable) topNodes.push(notice('unreadable', copy.notice.unreadable));
     if (village?.hasBoosts) topNodes.push(notice('boost', copy.notice.boost));
     if (village && deviceClockBehind(village.exportedAt, now)) topNodes.push(notice('clock', copy.notice.clock));
     top.replaceChildren(...topNodes);
@@ -132,6 +148,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
     const { state: next, outcome } = upsertVillage(state, result.village);
     state = next;
     keptNewer = outcome === 'kept-newer';
+    unreadable = false;
     persist();
     box.value = '';
     render();
@@ -197,6 +214,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   render();
 
   return () => {
+    disposed = true;
     clearInterval(timer);
     document.removeEventListener('visibilitychange', tick);
     root.removeEventListener('click', onClick);
