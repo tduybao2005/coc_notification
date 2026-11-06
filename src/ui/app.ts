@@ -1,5 +1,5 @@
 import { alertMessage, allFinished, finishedBetween, type AlertMessage } from '../core/alerts';
-import { jobName } from '../core/names';
+import { jobDetailText, jobName } from '../core/names';
 import { parseExport } from '../core/parse';
 import { saveSettings, type AlertSettings } from '../core/settings';
 import {
@@ -239,7 +239,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
           item.append(
             el('span', { class: 'job-name' }, jobName(job)),
             el('span', { class: 'job-remaining' }, formatRemaining(left)),
-            el('span', { class: 'job-detail' }, job.detail),
+            el('span', { class: 'job-detail' }, jobDetailText(job.detail, 'vi')),
             el('span', { class: 'job-end' }, formatEnd(job.endsAt)),
           );
           items.append(item);

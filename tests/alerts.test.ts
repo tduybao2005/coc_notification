@@ -2,7 +2,7 @@ import { alertMessage, allFinished, finishedBetween } from '../src/core/alerts';
 import type { Job, Village } from '../src/core/types';
 
 const job = (id: number, endsAt: number, group: Job['group'] = 'home-build'): Job =>
-  ({ id, group, detail: 'Cấp 6 → 7', endsAt });
+  ({ id, group, detail: { kind: 'upgrade', level: 6 }, endsAt });
 const village = (tag: string, jobs: Job[]): Village => ({ tag, exportedAt: 1, jobs, hasBoosts: false });
 
 test('includes the upper bound and excludes the lower bound', () => {

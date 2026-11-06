@@ -1,5 +1,5 @@
 import { STORAGE_KEY, emptyState, loadState, saveState, upsertVillage, removeVillage, type AppState } from '../src/core/store';
-import type { Village } from '../src/core/types';
+import type { JobDetail, Village } from '../src/core/types';
 import { memoryStore } from './helpers';
 
 const v = (tag: string, exportedAt: number): Village => ({ tag, exportedAt, jobs: [], hasBoosts: false });
@@ -116,4 +116,51 @@ test('an old copy that is not JSON is reported and kept', async () => {
   const result = await loadState(memoryStore(), () => legacy);
   expect(result).toEqual({ state: emptyState(), unreadable: true });
   expect(legacy.getItem(STORAGE_KEY)).toBe('{broken');
+});
+
+const oldVillage = (detail: unknown) => JSON.stringify({ villages: { '#A': {
+  tag: '#A', exportedAt: 1, hasBoosts: false,
+  jobs: [{ id: 1, group: 'home-build', detail, endsAt: 9 }],
+} }, activeTag: '#A' });
+
+test.each<[string, JobDetail]>([
+  ['Cấp 6 → 7', { kind: 'upgrade', level: 6 }],
+  ['Cấp 3 · Vũ khí 2', { kind: 'weapon', level: 3, weapon: 2 }],
+  ['Xây mới', { kind: 'build' }],
+  ['Hồi chiêu', { kind: 'cooldown' }],
+])('old detail %s is converted', async (raw, detail) => {
+  const { state, unreadable } = await loadState(memoryStore({ [STORAGE_KEY]: oldVillage(raw) }));
+  expect(state.villages['#A'].jobs[0].detail).toEqual(detail);
+  expect(unreadable).toBe(false);
+});
+
+test.each([['Cấp ba'], [''], [5], [null], [{ kind: 'nope' }], [{ kind: 'upgrade' }]])(
+  'an unknown detail %j drops that account', async (raw) => {
+    const { state, unreadable } = await loadState(memoryStore({ [STORAGE_KEY]: oldVillage(raw) }));
+    expect(state.villages).toEqual({});
+    expect(unreadable).toBe(true);
+  });
+
+test('a job that is not an object drops that account', async () => {
+  const raw = JSON.stringify({ villages: { '#A': { tag: '#A', exportedAt: 1, hasBoosts: false, jobs: [5] } }, activeTag: '#A' });
+  const { state, unreadable } = await loadState(memoryStore({ [STORAGE_KEY]: raw }));
+  expect(state.villages).toEqual({});
+  expect(unreadable).toBe(true);
+});
+
+test('new details read back unchanged', async () => {
+  const detail: JobDetail = { kind: 'weapon', level: 3, weapon: 2 };
+  const s = memoryStore({ [STORAGE_KEY]: oldVillage(detail) });
+  expect((await loadState(s)).state.villages['#A'].jobs[0].detail).toEqual(detail);
+});
+
+test('old data saves in the new form alongside a new account', async () => {
+  const s = memoryStore({ [STORAGE_KEY]: oldVillage('Cấp 6 → 7') });
+  const { state } = await loadState(s);
+  await saveState(s, upsertVillage(state, v('#B', 2)).state);
+  const again = await loadState(s);
+  expect(Object.keys(again.state.villages).sort()).toEqual(['#A', '#B']);
+  expect(again.state.villages['#A'].jobs[0].detail).toEqual({ kind: 'upgrade', level: 6 });
+  expect(await s.get(STORAGE_KEY)).not.toContain('Cấp');
+  expect(again.unreadable).toBe(false);
 });

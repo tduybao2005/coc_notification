@@ -2,7 +2,7 @@ import { remainingSeconds, formatRemaining, formatEnd, formatAgo, deviceClockBeh
 import type { Job } from '../src/core/types';
 
 const T = 1793895122;
-const job = (group: Job['group'], endsAt: number): Job => ({ id: endsAt, group, detail: '', endsAt });
+const job = (group: Job['group'], endsAt: number): Job => ({ id: endsAt, group, detail: { kind: 'build' }, endsAt });
 
 test('remaining time counts down from the device clock and stops at zero', () => {
   expect(remainingSeconds(T + 100, (T + 30) * 1000)).toBe(70);

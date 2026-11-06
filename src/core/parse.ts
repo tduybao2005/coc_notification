@@ -1,4 +1,4 @@
-import type { Group, Job, Village } from './types';
+import type { Group, Job, JobDetail, Village } from './types';
 
 export type ParseError = 'empty' | 'not-json' | 'not-export';
 export type ParseResult = { ok: true; village: Village } | { ok: false; error: ParseError };
@@ -24,12 +24,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const positive = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0;
 
-function detailOf(node: Record<string, unknown>, group: Group): string {
-  if (group === 'helper') return 'Hồi chiêu';
-  const lvl = typeof node.lvl === 'number' ? node.lvl : 0;
-  if (node.weapon !== undefined && node.weapon !== null) return `Cấp ${lvl} · Vũ khí ${node.weapon}`;
-  if (lvl === 0) return 'Xây mới';
-  return `Cấp ${lvl} → ${lvl + 1}`;
+function detailOf(node: Record<string, unknown>, group: Group): JobDetail {
+  if (group === 'helper') return { kind: 'cooldown' };
+  const level = typeof node.lvl === 'number' ? node.lvl : 0;
+  if (typeof node.weapon === 'number') return { kind: 'weapon', level, weapon: node.weapon };
+  if (level === 0) return { kind: 'build' };
+  return { kind: 'upgrade', level };
 }
 
 function collectJobs(node: unknown, group: Group, parentId: number | undefined, timestamp: number, out: Job[]): void {

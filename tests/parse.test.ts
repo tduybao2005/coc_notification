@@ -22,9 +22,9 @@ test('reads every running timer from the real export', () => {
 
 test('computes end time and target level', () => {
   const all = jobs(sample);
-  expect(all.find((j) => j.id === 1000026)).toMatchObject({ endsAt: 1794295613, detail: 'Cấp 12 → 13' });
-  expect(all.find((j) => j.id === 4000042)).toMatchObject({ group: 'builder-lab', detail: 'Cấp 17 → 18' });
-  expect(all.find((j) => j.id === 93000000)).toMatchObject({ group: 'helper', detail: 'Hồi chiêu' });
+  expect(all.find((j) => j.id === 1000026)).toMatchObject({ endsAt: 1794295613, detail: { kind: 'upgrade', level: 12 } });
+  expect(all.find((j) => j.id === 4000042)).toMatchObject({ group: 'builder-lab', detail: { kind: 'upgrade', level: 17 } });
+  expect(all.find((j) => j.id === 93000000)).toMatchObject({ group: 'helper', detail: { kind: 'cooldown' } });
 });
 
 test('keeps two upgrades of the same building as two jobs', () => {
@@ -36,13 +36,13 @@ test('finds timers nested inside crafted defenses', () => {
   const text = wrap({ buildings: [{ data: 1000097, types: [{ data: 103000011,
     modules: [{ data: 102000033, lvl: 1, timer: 100 }] }] }] });
   expect(jobs(text)).toEqual([{ id: 102000033, parentId: 103000011, group: 'home-build',
-    detail: 'Cấp 1 → 2', endsAt: T + 100 }]);
+    detail: { kind: 'upgrade', level: 1 }, endsAt: T + 100 }]);
 });
 
 test('keeps a timer on an object without numeric data, parented to the nearest ancestor with data', () => {
   const text = wrap({ buildings: [{ data: 1000097, types: [{ lvl: 3, timer: 50 }] }] });
   expect(jobs(text)).toEqual([{ id: 0, parentId: 1000097, group: 'home-build',
-    detail: 'Cấp 3 → 4', endsAt: T + 50 }]);
+    detail: { kind: 'upgrade', level: 3 }, endsAt: T + 50 }]);
 });
 
 test('keeps timers from unknown ids and sections', () => {
@@ -51,12 +51,13 @@ test('keeps timers from unknown ids and sections', () => {
 });
 
 test('uses neutral labels for cases the sample cannot confirm', () => {
-  expect(jobs(wrap({ buildings: [{ data: 1000001, lvl: 16, weapon: 1, timer: 9 }] }))[0].detail).toBe('Cấp 16 · Vũ khí 1');
-  expect(jobs(wrap({ buildings: [{ data: 1000006, lvl: 0, timer: 9 }] }))[0].detail).toBe('Xây mới');
+  expect(jobs(wrap({ buildings: [{ data: 1000001, lvl: 16, weapon: 1, timer: 9 }] }))[0].detail).toEqual({ kind: 'weapon', level: 16, weapon: 1 });
+  expect(jobs(wrap({ buildings: [{ data: 1000001, lvl: 16, weapon: 'x', timer: 9 }] }))[0].detail).toEqual({ kind: 'upgrade', level: 16 });
+  expect(jobs(wrap({ buildings: [{ data: 1000006, lvl: 0, timer: 9 }] }))[0].detail).toEqual({ kind: 'build' });
 });
 
 test('maps heroes and ignores invalid timers', () => {
-  expect(jobs(wrap({ heroes: [{ data: 28000000, lvl: 71, timer: 9 }] }))[0]).toMatchObject({ group: 'home-hero', detail: 'Cấp 71 → 72' });
+  expect(jobs(wrap({ heroes: [{ data: 28000000, lvl: 71, timer: 9 }] }))[0]).toMatchObject({ group: 'home-hero', detail: { kind: 'upgrade', level: 71 } });
   expect(jobs(wrap({ units: [{ data: 1, timer: '9' }, { data: 2, timer: -1 }, { data: 3, timer: 0 }] }))).toEqual([]);
 });
 

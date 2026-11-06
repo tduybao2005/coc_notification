@@ -1,4 +1,4 @@
-import { jobName } from './names';
+import { jobDetailText, jobName } from './names';
 import { remainingSeconds } from './time';
 import type { Job, Village } from './types';
 
@@ -28,7 +28,7 @@ export function finishedBetween(villages: Village[], fromSec: number, toSec: num
 export function alertMessage(finished: FinishedJob[]): AlertMessage {
   if (finished.length === 1) {
     const { tag, job } = finished[0];
-    return { title: `${jobName(job)} đã xong`, body: `${job.detail} · ${tag}` };
+    return { title: `${jobName(job)} đã xong`, body: `${jobDetailText(job.detail, 'vi')} · ${tag}` };
   }
   return {
     title: `${finished.length} hạng mục đã xong`,
