@@ -1,3 +1,5 @@
 node_modules/
 dist/
 api_format.md
+.superpowers/
+.playwright-mcp/

@@ -1,6 +1,6 @@
 import type { AlertMessage } from '../core/alerts';
 
-export type Sound = 'voice' | 'ting';
+export type Sound = 'voice-vi' | 'voice-en' | 'ting';
 export type BannerPermission = 'granted' | 'denied' | 'default' | 'unsupported';
 export interface AlertOutput {
   play(sound: Sound): Promise<boolean>; // resolves when playback ends; false if blocked or failed
@@ -12,7 +12,11 @@ export interface AlertOutput {
 }
 
 const PLAY_TIMEOUT_MS = 10_000;
-const SOUNDS: Sound[] = ['voice', 'ting'];
+const SOUND_FILES: Record<Sound, string> = {
+  'voice-vi': 'voice.wav',
+  'voice-en': 'voice-en.wav',
+  ting: 'ting.wav',
+};
 
 // None of the functions below may throw: a failing signal must not stop the others.
 export function browserAlertOutput(
@@ -20,9 +24,9 @@ export function browserAlertOutput(
   makeAudio: (src: string) => HTMLAudioElement = (src) => new Audio(src),
 ): AlertOutput {
   const audios: Partial<Record<Sound, HTMLAudioElement>> = {};
-  for (const sound of SOUNDS) {
+  for (const sound of Object.keys(SOUND_FILES) as Sound[]) {
     try {
-      const audio = makeAudio(`${baseUrl}sounds/${sound}.wav`);
+      const audio = makeAudio(`${baseUrl}sounds/${SOUND_FILES[sound]}`);
       audio.preload = 'auto';
       audios[sound] = audio;
     } catch {

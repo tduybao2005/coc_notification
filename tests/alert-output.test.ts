@@ -18,7 +18,8 @@ function setup() {
     made.push(audio);
     return audio as unknown as HTMLAudioElement;
   });
-  return { output, made, voice: () => made.find((a) => a.src.endsWith('voice.wav'))! };
+  return { output, made, voice: () => made.find((a) => a.src.endsWith('/voice.wav'))!,
+    voiceEn: () => made.find((a) => a.src.endsWith('/voice-en.wav'))! };
 }
 
 const define = (name: string, value: unknown) =>
@@ -31,11 +32,23 @@ afterEach(() => {
   for (const name of ['vibrate', 'userActivation', 'serviceWorker']) Reflect.deleteProperty(navigator, name);
 });
 
+test('plays the English voice from its own element', async () => {
+  const { output, voice, voiceEn } = setup();
+  const done = output.play('voice-en');
+  await vi.advanceTimersByTimeAsync(0);
+  expect(voiceEn().play).toHaveBeenCalledOnce();
+  expect(voice().play).not.toHaveBeenCalled();
+  voiceEn().dispatchEvent(new Event('ended'));
+  expect(await done).toBe(true);
+});
+
 test('plays the right file under the base path', async () => {
   const { output, made, voice } = setup();
-  expect(made.map((a) => a.src).sort()).toEqual(['/coc_notification/sounds/ting.wav', '/coc_notification/sounds/voice.wav']);
+  expect(made.map((a) => a.src).sort()).toEqual([
+    '/coc_notification/sounds/ting.wav', '/coc_notification/sounds/voice-en.wav', '/coc_notification/sounds/voice.wav',
+  ]);
   expect(made.every((a) => a.preload === 'auto')).toBe(true);
-  const done = output.play('voice');
+  const done = output.play('voice-vi');
   await vi.advanceTimersByTimeAsync(0);
   expect(voice().play).toHaveBeenCalledOnce();
   expect(voice().currentTime).toBe(0);
@@ -45,7 +58,7 @@ test('plays the right file under the base path', async () => {
 
 test('play resolves true when the sound ends', async () => {
   const { output, voice } = setup();
-  const done = output.play('voice');
+  const done = output.play('voice-vi');
   await vi.advanceTimersByTimeAsync(0);
   voice().dispatchEvent(new Event('ended'));
   expect(await done).toBe(true);
@@ -54,12 +67,12 @@ test('play resolves true when the sound ends', async () => {
 test('a blocked sound resolves false', async () => {
   const { output, voice } = setup();
   voice().play.mockRejectedValue(new Error('NotAllowedError'));
-  expect(await output.play('voice')).toBe(false);
+  expect(await output.play('voice-vi')).toBe(false);
 });
 
 test('a load error resolves false', async () => {
   const { output, voice } = setup();
-  const done = output.play('voice');
+  const done = output.play('voice-vi');
   await vi.advanceTimersByTimeAsync(0);
   voice().dispatchEvent(new Event('error'));
   expect(await done).toBe(false);
@@ -68,7 +81,7 @@ test('a load error resolves false', async () => {
 test('a sound that never ends gives up after 10 seconds', async () => {
   const { output } = setup();
   let result: boolean | undefined;
-  void output.play('voice').then((r) => { result = r; });
+  void output.play('voice-vi').then((r) => { result = r; });
   await vi.advanceTimersByTimeAsync(9999);
   expect(result).toBeUndefined();
   await vi.advanceTimersByTimeAsync(1);

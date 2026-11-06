@@ -212,7 +212,7 @@ test('a job reaching its end fires the enabled kinds once, in order', async () =
   const output = fakeOutput();
   await pasted((T + 54757) * 1000, { output, settings: all });
   await vi.advanceTimersByTimeAsync(5000);
-  expect(output.calls).toEqual(['banner:Workshop đã xong', 'vibrate', 'ting', 'voice']);
+  expect(output.calls).toEqual(['banner:Workshop đã xong', 'vibrate', 'ting', 'voice-vi']);
 });
 
 test('only the enabled kinds fire', async () => {
@@ -305,7 +305,7 @@ test('a sound that fails shows a notice, the next success clears it', async () =
 });
 
 test('a failed ting stays reported even when the voice plays', async () => {
-  const output = fakeOutput({ play: async (sound) => sound === 'voice' });
+  const output = fakeOutput({ play: async (sound) => sound === 'voice-vi' });
   const root = await pasted((T + 98) * 1000, { output, settings: on({ ting: true, voice: true }), clip: async () => oneJob });
   await vi.advanceTimersByTimeAsync(3000);
   expect(notice(root, 'sound-failed')).not.toBeNull();
@@ -506,9 +506,17 @@ test('the test button does nothing when all are off', async () => {
   expect(output.calls).toEqual([]);
 });
 
-test('the footer credits the voice', async () => {
+test('the footer credits both voices', async () => {
   const root = await setup(T * 1000);
   expect(root.querySelector('footer a[href="licenses/vais1000-voice.txt"]')).not.toBeNull();
+  expect(root.querySelector('footer a[href="licenses/lj-speech-voice.txt"]')).not.toBeNull();
+});
+
+test('the voice follows the language', async () => {
+  const output = fakeOutput();
+  await pasted((T + 54757) * 1000, { output, deviceLanguage: 'en', settings: on({ voice: true }) });
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(output.calls).toEqual(['voice-en']);
 });
 
 test('nothing fires after unmount', async () => {

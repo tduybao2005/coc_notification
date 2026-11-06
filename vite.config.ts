@@ -8,7 +8,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: [
         'favicon.ico', 'apple-touch-icon-180x180.png', 'licenses/clash-of-clans-data.txt',
-        'sounds/voice.wav', 'sounds/ting.wav', 'licenses/vais1000-voice.txt',
+        'sounds/voice.wav', 'sounds/voice-en.wav', 'sounds/ting.wav',
+        'licenses/vais1000-voice.txt', 'licenses/lj-speech-voice.txt',
       ],
       workbox: { importScripts: ['sw-notifications.js'] },
       manifest: {

@@ -21,11 +21,17 @@ Sau khi cài, app mở được cả khi không có mạng.
 
 Không có máy chủ, không có analytics. Dữ liệu dán vào chỉ được xử lý trong trình duyệt và lưu trong IndexedDB của trình duyệt trên máy bạn, không gửi đi đâu. Mọi người dùng chung một URL nhưng không ai thấy dữ liệu của ai.
 
+## Ngôn ngữ
+
+App có tiếng Việt và tiếng Anh. Mặc định app theo ngôn ngữ của thiết bị (bắt đầu bằng `vi` thì tiếng Việt, ngược lại tiếng Anh); bạn có thể chọn lại trong Cài đặt và lựa chọn được lưu trên máy. Văn bản, thời gian, thông báo và giọng nói đều theo ngôn ngữ đang chọn. Tên hạng mục luôn bằng tiếng Anh ở cả hai ngôn ngữ, vì dữ liệu xuất từ game chỉ chứa mã số và bảng tên chỉ có tiếng Anh.
+
 ## Thông báo
 
 Trong phần Thông báo, bạn chọn một hoặc nhiều kiểu báo: giọng nói, tiếng ting, rung, hiện thông báo trên màn hình. Hiện tại app chỉ báo khi đang mở; tắt màn hình hoặc chuyển sang app khác thì sẽ không báo.
 
 Giọng đọc "Có công trình vừa hoàn thành" là giọng tổng hợp của Piper, dùng giọng `vi_VN-vais1000-medium` huấn luyện từ bộ dữ liệu VAIS-1000 (CC BY). Chi tiết nằm trong `public/licenses/vais1000-voice.txt`.
+
+Giọng đọc tiếng Anh "A building has finished." cũng là giọng tổng hợp của Piper, dùng giọng `en_US-ljspeech-high` huấn luyện từ bộ dữ liệu LJ Speech (phạm vi công cộng). Chi tiết nằm trong `public/licenses/lj-speech-voice.txt`. App đọc giọng theo ngôn ngữ đang chọn.
 
 Tiếng ting được tạo bằng code, không có vấn đề bản quyền. Tạo lại bằng:
 
@@ -34,6 +40,8 @@ npm run ting
 ```
 
 Tạo lại `public/sounds/voice.wav` bằng Piper 1.8 với giọng `vi_VN-vais1000-medium`, `SynthesisConfig(length_scale=1.0, volume=0.9)`, câu `Có công trình vừa hoàn thành.`, rồi thêm 0,25 giây im lặng ở mỗi đầu để loa và tai nghe Bluetooth không nuốt mất chữ đầu.
+
+Tạo lại `public/sounds/voice-en.wav` bằng Piper 1.8 với giọng `en_US-ljspeech-high`, `SynthesisConfig(length_scale=1.0, volume=0.9)`, câu `A building has finished.`, rồi thêm 0,25 giây im lặng ở mỗi đầu.
 
 ## Phát triển
 

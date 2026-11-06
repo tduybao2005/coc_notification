@@ -18,7 +18,7 @@ export function memoryStore(
   };
 }
 
-// Records what was fired in `calls`: banner:<title>, vibrate, ting, voice. Everything succeeds by default.
+// Records what was fired in `calls`: banner:<title>, vibrate, ting, voice-vi, voice-en. Everything succeeds by default.
 export function fakeOutput(overrides: Partial<AlertOutput> = {}): AlertOutput & { calls: string[] } {
   const calls: string[] = [];
   return {

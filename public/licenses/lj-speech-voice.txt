@@ -1,0 +1,9 @@
+Voice clip: public/sounds/voice-en.wav
+
+This file is synthetic speech generated with Piper using the voice en_US-ljspeech-high. It is not a
+recording taken from the dataset.
+
+The voice was trained on the LJ Speech Dataset.
+https://keithito.com/LJ-Speech-Dataset/
+
+Licence: public domain

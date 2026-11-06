@@ -71,11 +71,13 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
 
   const footer = el('footer');
   const credit = el('p');
-  const voiceCredit = el('p');
+  const voiceCreditVi = el('p');
+  const voiceCreditEn = el('p');
   // Relative hrefs so the links also work when the app is served from a sub-path (GitHub Pages).
   credit.append(el('a', { href: 'licenses/clash-of-clans-data.txt' }, text().credit));
-  voiceCredit.append(el('a', { href: 'licenses/vais1000-voice.txt' }, text().voiceCredit));
-  footer.append(el('p', {}, text().privacy), el('p', {}, text().disclaimer), credit, voiceCredit);
+  voiceCreditVi.append(el('a', { href: 'licenses/vais1000-voice.txt' }, text().voiceCreditVi));
+  voiceCreditEn.append(el('a', { href: 'licenses/lj-speech-voice.txt' }, text().voiceCreditEn));
+  footer.append(el('p', {}, text().privacy), el('p', {}, text().disclaimer), credit, voiceCreditVi, voiceCreditEn);
 
   root.replaceChildren(el('h1', {}, text().title), top, controls, panel.element, list, footer);
 
@@ -166,6 +168,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   // Order: banner, vibrate, ting (waits until it ends), voice. A failing signal never stops the next.
   async function fireAlert(message: AlertMessage): Promise<void> {
     const chosen = settings;
+    const lang = language();
     if (chosen.banner) {
       // Not awaited: a registration that never answers must not hold back the sounds.
       try { void deps.output.showBanner(message).catch(() => {}); } catch { /* ignore */ }
@@ -179,7 +182,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
       let failed = false;
       if (chosen.ting && !(await playSafe('ting'))) failed = true;
       if (disposed) return;
-      if (chosen.voice && !(await playSafe('voice'))) failed = true;
+      if (chosen.voice && !(await playSafe(lang === 'vi' ? 'voice-vi' : 'voice-en'))) failed = true;
       if (disposed || soundFailed === failed) return;
       soundFailed = failed;
       render();
