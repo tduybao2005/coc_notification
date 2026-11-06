@@ -18,8 +18,8 @@ export default defineConfig({
         description: 'Xem thời gian nâng cấp còn lại trong làng',
         lang: 'vi',
         display: 'standalone',
-        theme_color: '#14171f',
-        background_color: '#14171f',
+        theme_color: '#0e1116',
+        background_color: '#0e1116',
         icons: [
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },

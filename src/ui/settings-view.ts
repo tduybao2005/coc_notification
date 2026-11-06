@@ -32,10 +32,10 @@ export function createSettingsView(handlers: SettingsHandlers): SettingsView {
   back.append(icon('back'));
   back.addEventListener('click', () => handlers.onBack());
   const title = el('h1');
-  const header = el('div', { class: 'top' });
+  const header = el('div', { class: 'app-bar' });
   header.append(back, title);
 
-  const notices = el('div', { class: 'notices' });
+  const notices = el('div', { class: 'notices stack' });
 
   const languageTitle = el('h2');
   const languageInputs = {} as Record<Language, HTMLInputElement>;
@@ -69,7 +69,7 @@ export function createSettingsView(handlers: SettingsHandlers): SettingsView {
 
   // The account section exists only while there is an account.
   const accountTitle = el('h2');
-  const remove = el('button', { type: 'button', 'data-action': 'delete' });
+  const remove = el('button', { type: 'button', 'data-action': 'delete', class: 'danger' });
   remove.addEventListener('click', () => handlers.onDelete());
   const account = el('section');
   account.append(accountTitle, remove);

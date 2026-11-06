@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { STORAGE_KEY, loadState, type KeyValueStore } from '../src/core/store';
 import type { Language } from '../src/core/language';
+import { formatCountdown } from '../src/core/time';
 import { DEFAULT_SETTINGS, loadSettings, type AlertSettings, type Settings } from '../src/core/settings';
 import type { AlertOutput } from '../src/platform/alert-output';
 import { mountApp, type AppDeps } from '../src/ui/app';
@@ -710,4 +711,194 @@ test('needs-tap on the settings screen clears on the next click', async () => {
   active = true;
   document.dispatchEvent(new Event('click'));
   expect(notice(root, 'needs-tap')).toBeNull();
+});
+
+const pasteButtons = (root: HTMLElement) => [...root.querySelectorAll<HTMLButtonElement>('button[data-action="paste"]')];
+const pasteBox = (root: HTMLElement) => root.querySelector('textarea[name="export"]') as HTMLTextAreaElement;
+const nextWhat = (root: HTMLElement) => root.querySelector('[data-role="next"] .what')?.textContent;
+const nextCount = (root: HTMLElement) => root.querySelector('[data-role="next"] .next-count')!.textContent;
+const account = (tag: string, buildings: unknown[], extra: object = {}) =>
+  JSON.stringify({ tag, timestamp: T, buildings, ...extra });
+
+test('one big paste button before any data', async () => {
+  const root = await setup(T * 1000);
+  const [button] = pasteButtons(root);
+  expect(pasteButtons(root)).toHaveLength(1);
+  expect(button.closest('.controls')).not.toBeNull();
+  expect(button.textContent).toBe('Dán dữ liệu');
+  expect(button.classList.contains('primary')).toBe(true);
+});
+
+test('a small paste button beside the data age', async () => {
+  const root = await pasted((T + 807) * 1000);
+  const [button] = pasteButtons(root);
+  expect(pasteButtons(root)).toHaveLength(1);
+  expect(button.closest('.account')).not.toBeNull();
+  expect(button.textContent).toBe('Dán mới');
+  expect(button.querySelector('svg')).not.toBeNull();
+  expect(button.classList.contains('primary')).toBe(false);
+});
+
+test('a big paste button when everything finished', async () => {
+  const root = await pasted((T + 98) * 1000, { clip: async () => oneJob });
+  await vi.advanceTimersByTimeAsync(3000);
+  const [button] = pasteButtons(root);
+  expect(pasteButtons(root)).toHaveLength(1);
+  expect(button.closest('[data-notice="all-finished"]')).not.toBeNull();
+  expect(button.textContent).toBe('Dán dữ liệu mới');
+  expect(button.classList.contains('primary')).toBe(true);
+});
+
+test('the paste button keeps keyboard focus when it moves', async () => {
+  const root = await setup((T + 807) * 1000);
+  pasteButtons(root)[0].focus();
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  expect(pasteButtons(root)[0].closest('.account')).not.toBeNull();
+  expect(document.activeElement).toBe(pasteButtons(root)[0]);
+});
+
+test('the paste box shows only when needed', async () => {
+  const root = await setup((T + 807) * 1000);
+  expect(pasteBox(root).hidden).toBe(false);
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  expect(pasteBox(root).hidden).toBe(true);
+  expect(root.querySelector('.controls')!.hasAttribute('hidden')).toBe(true);
+  const failing = async () => { throw new Error('denied'); };
+  unmount!();
+  const again = await setup((T + 807) * 1000, { clip: failing });
+  click(again, 'button[data-action="paste"]');
+  await flush();
+  expect(pasteBox(again).hidden).toBe(false);
+  expect(again.querySelector('.controls')!.hasAttribute('hidden')).toBe(false);
+  pasteBox(again).value = sample;
+  pasteBox(again).dispatchEvent(new Event('input', { bubbles: true }));
+  await flush();
+  expect(pasteBox(again).hidden).toBe(true);
+});
+
+test('the next card picks the soonest job and ticks', async () => {
+  const root = await pasted((T + 807) * 1000);
+  const soonest = Number((row(root, 'Baby Dragon') as HTMLElement).dataset.endsAt);
+  expect(nextWhat(root)).toContain('Baby Dragon');
+  expect(nextCount(root)).toBe(formatCountdown(soonest - (T + 807), 'vi'));
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(nextCount(root)).toBe(formatCountdown(soonest - (T + 808), 'vi'));
+});
+
+test('the next card skips helpers', async () => {
+  const clip = async () => account('#TEST123', [{ data: 1000026, lvl: 1, timer: 5000 }],
+    { helpers: [{ data: 93000000, lvl: 1, helper_cooldown: 100 }] });
+  const root = await pasted((T + 10) * 1000, { clip });
+  expect(nextWhat(root)).toContain('Dark Barracks');
+});
+
+test('the next card moves on when a job finishes', async () => {
+  const root = await pasted((T + 98) * 1000, { clip: staggered });
+  expect(nextWhat(root)).toContain('Dark Barracks');
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(nextWhat(root)).toContain('Workshop');
+});
+
+test('the next card follows the account tabs', async () => {
+  let clip = account('#TEST123', [{ data: 1000026, lvl: 1, timer: 5000 }]);
+  const root = await setup((T + 10) * 1000, { clip: async () => clip });
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  clip = account('#OTHER1', [{ data: 1000059, lvl: 1, timer: 9000 }]);
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  expect(nextWhat(root)).toContain('Workshop');
+  click(root, 'button[data-tag="#TEST123"]');
+  expect(nextWhat(root)).toContain('Dark Barracks');
+});
+
+test.each([
+  ['only helpers', account('#TEST123', [], { helpers: [{ data: 93000000, lvl: 1, helper_cooldown: 5000 }] })],
+  ['no jobs', account('#TEST123', [])],
+])('no next card with %s', async (_name, clip) => {
+  const root = await pasted((T + 10) * 1000, { clip: async () => clip });
+  expect(root.querySelector('[data-role="next"]')).toBeNull();
+  expect(notice(root, 'all-finished')).toBeNull();
+});
+
+test('the nudge shows after the first paste with alerts off', async () => {
+  const root = await pasted((T + 807) * 1000);
+  expect(root.querySelector('[data-role="alerts-nudge"]')).not.toBeNull();
+});
+
+test('the nudge opens settings and goes away', async () => {
+  const root = await pasted((T + 807) * 1000);
+  click(root, 'button[data-action="open-alerts"]');
+  expect(screen(root)).toBe('settings');
+  click(root, 'button[data-action="back"]');
+  expect(root.querySelector('[data-role="alerts-nudge"]')).toBeNull();
+});
+
+test('no nudge once an alert is on, or on the second paste, or after reopening', async () => {
+  const withAlert = await pasted((T + 807) * 1000, { settings: on({ voice: true }) });
+  expect(withAlert.querySelector('[data-role="alerts-nudge"]')).toBeNull();
+  unmount!();
+  store = memoryStore();
+  const root = await pasted((T + 807) * 1000);
+  expect(root.querySelector('[data-role="alerts-nudge"]')).not.toBeNull();
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  expect(root.querySelector('[data-role="alerts-nudge"]')).not.toBeNull();
+  unmount!();
+  const reopened = await setup((T + 900) * 1000);
+  expect(reopened.querySelector('[data-role="alerts-nudge"]')).toBeNull();
+});
+
+test('the nudge does not come back on a second paste after it was dismissed', async () => {
+  const root = await pasted((T + 807) * 1000);
+  openSettings(root);
+  click(root, 'button[data-action="back"]');
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  expect(root.querySelector('[data-role="alerts-nudge"]')).toBeNull();
+});
+
+test('deleting the last account returns to the first screen', async () => {
+  const root = await pasted((T + 807) * 1000);
+  openSettings(root);
+  click(root, 'button[data-action="delete"]');
+  expect(root.querySelector('[data-role="help"]')).not.toBeNull();
+  expect(pasteButtons(root)).toHaveLength(1);
+  expect(pasteButtons(root)[0].classList.contains('primary')).toBe(true);
+  expect(pasteBox(root).hidden).toBe(false);
+  expect(root.querySelector('[data-role="alerts-nudge"]')).toBeNull();
+});
+
+test('the account line drops the tag with two accounts', async () => {
+  let clip = sample;
+  const root = await setup((T + 807) * 1000, { clip: async () => clip });
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  expect(root.querySelector('.account span')!.textContent).toContain('#TEST123');
+  clip = account('#OTHER1', [{ data: 1000026, lvl: 1, timer: 5000 }]);
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  expect(root.querySelector('.account span')!.textContent).not.toContain('#OTHER1');
+  expect(root.querySelector('.account span')!.textContent).not.toContain('#TEST123');
+});
+
+test('group counts', async () => {
+  const root = await pasted((T + 807) * 1000);
+  expect(root.querySelector('.group-count')!.textContent).toBe('6');
+  expect(root.querySelector('h2')!.textContent).toBe('Làng chính · Công trình');
+});
+
+test('the export time is in place', async () => {
+  const root = await pasted((T + 807) * 1000);
+  expect(root.querySelector('.export-at')!.textContent).toContain('lúc ');
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(root.querySelector('.export-at')!.textContent).toContain('lúc ');
+});
+
+test('the account line is in English too', async () => {
+  const root = await pasted((T + 807) * 1000, { deviceLanguage: 'en' });
+  expect(root.querySelector('.account span')!.textContent).toContain('Exported 13m ago');
+  expect(root.querySelector('.export-at')!.textContent).toContain('at ');
 });

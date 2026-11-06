@@ -1,5 +1,4 @@
-import { alertMessage, allFinished, finishedBetween, type AlertMessage } from '../core/alerts';
-import { jobDetailText, jobName } from '../core/names';
+import { alertMessage, allFinished, finishedBetween, nextJob, type AlertMessage } from '../core/alerts';
 import { parseExport } from '../core/parse';
 import type { Language } from '../core/language';
 import { anyAlertOn, saveSettings, type Settings } from '../core/settings';
@@ -7,13 +6,14 @@ import {
   removeVillage, saveState, upsertVillage, type AppState, type KeyValueStore, type LoadResult,
 } from '../core/store';
 import {
-  deviceClockBehind, formatAgo, formatEnd, formatRemaining, groupJobs, remainingSeconds,
+  deviceClockBehind, formatAgo, formatCountdown, formatEnd, formatRemaining, remainingSeconds,
 } from '../core/time';
 import type { Village } from '../core/types';
 import type { AlertOutput, Sound } from '../platform/alert-output';
 import { copy, type Copy } from './copy';
 import { el } from './dom';
 import { icon } from './icons';
+import { jobList, nextCard } from './job-view';
 import { createSettingsView, type AlertKey } from './settings-view';
 
 export interface AppDeps {
@@ -45,7 +45,11 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   let unreadable = deps.loaded.unreadable;
   let disposed = false;
   let finishedCount = 0;
-  let accountLine: HTMLElement | null = null;
+  // The text node with the age of the data, the only part of the account line that changes each minute.
+  let agoNode: Text | null = null;
+  let clipboardFailed = false;
+  // The hint to turn on alerts: set by the first account, not saved, so it lasts until settings open.
+  let nudge = false;
   let view: 'main' | 'settings' = 'main';
   // True while the history holds the entry pushed by opening settings.
   let settingsEntry = false;
@@ -53,13 +57,15 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   const language = (): Language => settings.language ?? deps.deviceLanguage;
   const text = (): Copy => copy[language()];
 
-  const top = el('div');
-  const list = el('div');
+  const top = el('div', { class: 'stack' });
+  const list = el('div', { class: 'content' });
   const title = el('h1');
   const settingsButton = el('button', { type: 'button', 'data-action': 'settings' });
   settingsButton.append(icon('settings'));
-  const header = el('div', { class: 'top' });
+  const header = el('div', { class: 'app-bar' });
   header.append(title, settingsButton);
+  // The only paste button. render moves it between the first screen, the account line and the
+  // "everything finished" block, so the listener is attached once.
   const pasteButton = el('button', { type: 'button', 'data-action': 'paste' });
   const box = el('textarea', { name: 'export', rows: '3', autocomplete: 'off', spellcheck: 'false' });
   const controls = el('div', { class: 'controls' });
@@ -92,8 +98,12 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   });
   footer.append(privacy, disclaimer, ...links);
 
+  const side = el('div', { class: 'side' });
+  side.append(top, controls);
+  const layout = el('div', { class: 'layout' });
+  layout.append(side, list);
   const mainView = el('div', { 'data-view': 'main' });
-  mainView.append(header, top, controls, list, footer);
+  mainView.append(header, layout, footer);
   root.replaceChildren(mainView, settingsView.element);
 
   // Text that is built once and must still follow the language, including attributes.
@@ -101,7 +111,6 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
     const t = text();
     title.textContent = t.title;
     settingsButton.setAttribute('aria-label', t.settings.open);
-    pasteButton.textContent = t.paste;
     box.setAttribute('placeholder', t.placeholder);
     box.setAttribute('aria-label', t.placeholder);
     privacy.textContent = t.privacy;
@@ -112,13 +121,58 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   }
 
   const active = (): Village | undefined => (state.activeTag === null ? undefined : state.villages[state.activeTag]);
-  const accountText = (village: Village) => {
-    const lang = language();
-    const ago = formatAgo(Math.max(0, deps.now() / 1000 - village.exportedAt), lang);
-    const when = text().exportedAt.replace('{time}', formatEnd(village.exportedAt, lang)).replace('{ago}', ago);
-    return `${village.tag} · ${when}`;
-  };
-  const notice = (kind: string, message: string) => el('p', { 'data-notice': kind, role: 'status' }, message);
+  const agoText = (village: Village): string =>
+    text().exportedAgo.replace('{ago}', formatAgo(Math.max(0, deps.now() / 1000 - village.exportedAt), language()));
+  const notice = (kind: string, message: string) =>
+    el('p', { class: 'note', 'data-notice': kind, role: 'status' }, message);
+
+  // The tag (only when there is one account: with several, the chips already show it), how long ago the
+  // data was exported, and the export time, which only wide screens show.
+  function accountRow(village: Village, withTag: boolean): HTMLElement {
+    const line = el('span');
+    if (withTag) line.append(el('b', {}, village.tag), ' · ');
+    agoNode = document.createTextNode(agoText(village));
+    const when = text().exportedAt.replace('{time}', formatEnd(village.exportedAt, language()));
+    line.append(agoNode, el('span', { class: 'export-at' }, ` · ${when}`));
+    const row = el('div', { class: 'account' });
+    row.append(line);
+    return row;
+  }
+
+  function stepsCard(t: Copy): HTMLElement {
+    const help = el('div', { 'data-role': 'help' });
+    help.append(el('h2', {}, t.helpTitle));
+    [t.help1, t.help2, t.help3].forEach((step, index) => {
+      const item = el('div', { class: 'step' });
+      item.append(el('span', { class: 'num' }, String(index + 1)), el('span', {}, step));
+      help.append(item);
+    });
+    return help;
+  }
+
+  function finishedCard(t: Copy): HTMLElement {
+    const card = el('div', { class: 'hero', 'data-notice': 'all-finished', role: 'status' });
+    card.append(
+      el('div', { class: 'eyebrow' }, t.allDoneEyebrow),
+      el('div', { class: 'what big' }, t.allDoneTitle),
+      el('div', { class: 'when' }, t.allDoneText),
+    );
+    return card;
+  }
+
+  function nudgeBlock(t: Copy): HTMLElement {
+    const block = el('div', { class: 'nudge', 'data-role': 'alerts-nudge' });
+    const action = el('button', { type: 'button', 'data-action': 'open-alerts' }, t.nudgeAction);
+    block.append(el('span', {}, t.nudge), action);
+    return block;
+  }
+
+  // Sets what the paste button says and looks like for where it is about to be placed.
+  function styleFor(mode: 'first' | 'small' | 'fresh', t: Copy): void {
+    pasteButton.classList.toggle('primary', mode !== 'small');
+    if (mode === 'small') pasteButton.replaceChildren(icon('clipboard'), document.createTextNode(t.pasteSmall));
+    else pasteButton.replaceChildren(document.createTextNode(mode === 'first' ? t.paste : t.pasteFresh));
+  }
 
   // Saves without waiting, so the screen never stalls on storage. The notice appears or clears when
   // the result arrives, and only a change in the result triggers a redraw.
@@ -196,6 +250,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   function openSettings(): void {
     if (view === 'settings') return;
     view = 'settings';
+    nudge = false;
     history.pushState({ view: 'settings' }, '');
     settingsEntry = true;
     render();
@@ -290,62 +345,65 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
     const village = active();
     const now = deps.now();
     const tags = Object.keys(state.villages);
+    // Moving the button drops keyboard focus in a real browser, so give it back afterwards.
+    const keepFocus = view === 'main' && document.activeElement === pasteButton;
+    if (tags.length === 0) nudge = false;
 
     const topNodes: HTMLElement[] = [];
-    if (tags.length === 0) {
-      const help = el('div', { 'data-role': 'help' });
-      help.append(el('p', {}, t.help1), el('p', {}, t.help2), el('p', {}, t.help3));
-      topNodes.push(help);
-    }
+    if (tags.length === 0) topNodes.push(stepsCard(t));
     if (tags.length >= 2) {
-      const tabs = el('div', { class: 'tabs' });
+      const chips = el('div', { class: 'chips' });
       for (const tag of tags) {
-        tabs.append(el('button', {
+        chips.append(el('button', {
           type: 'button', 'data-tag': tag, 'aria-pressed': String(tag === state.activeTag),
         }, tag));
       }
-      topNodes.push(tabs);
+      topNodes.push(chips);
     }
-    accountLine = null;
+    agoNode = null;
+    const done = village !== undefined && allFinished(village.jobs, now);
     if (village) {
-      const row = el('div', { class: 'account' });
-      accountLine = el('span', {}, accountText(village));
-      row.append(accountLine);
-      topNodes.push(row, el('p', { class: 'hint' }, t.staleHint));
+      const row = accountRow(village, tags.length < 2);
+      if (!done) {
+        styleFor('small', t);
+        row.append(pasteButton);
+      }
+      topNodes.push(row);
+    } else {
+      styleFor('first', t);
+      controls.prepend(pasteButton);
     }
     if (errorText !== null) topNodes.push(notice('error', errorText));
     if (keptNewer) topNodes.push(notice('kept-newer', t.notice['kept-newer']));
     if (view === 'main') topNodes.push(...alertNotices());
     if (unreadable) topNodes.push(notice('unreadable', t.notice.unreadable));
-    if (village && allFinished(village.jobs, now)) topNodes.push(notice('all-finished', t.notice['all-finished']));
     if (village?.hasBoosts) topNodes.push(notice('boost', t.notice.boost));
     if (village && deviceClockBehind(village.exportedAt, now)) topNodes.push(notice('clock', t.notice.clock));
+    const upcoming = village ? nextJob(village.jobs, now) : null;
+    if (village && done) {
+      const card = finishedCard(t);
+      styleFor('fresh', t);
+      card.append(pasteButton);
+      topNodes.push(card);
+    } else if (upcoming) {
+      topNodes.push(nextCard(upcoming, now, lang, t));
+    }
+    if (nudge && village) topNodes.push(nudgeBlock(t));
     top.replaceChildren(...topNodes);
+
+    const showBox = tags.length === 0 || clipboardFailed;
+    box.hidden = !showBox;
+    controls.hidden = !showBox;
 
     const listNodes: HTMLElement[] = [];
     finishedCount = 0;
     if (village) {
-      if (village.jobs.length === 0) listNodes.push(el('p', { 'data-role': 'no-jobs' }, t.noJobs));
-      for (const { group, jobs } of groupJobs(village.jobs, now)) {
-        const section = el('section');
-        const items = el('ul');
-        for (const job of jobs) {
-          const left = remainingSeconds(job.endsAt, now);
-          if (left === 0) finishedCount += 1;
-          const item = el('li', { 'data-ends-at': String(job.endsAt) });
-          item.append(
-            el('span', { class: 'job-name' }, jobName(job, lang)),
-            el('span', { class: 'job-remaining' }, formatRemaining(left, lang)),
-            el('span', { class: 'job-detail' }, jobDetailText(job.detail, lang)),
-            el('span', { class: 'job-end' }, formatEnd(job.endsAt, lang)),
-          );
-          items.append(item);
-        }
-        section.append(el('h2', {}, t.groups[group]), items);
-        listNodes.push(section);
-      }
+      const jobs = jobList(village, now, lang, t);
+      finishedCount = jobs.finished;
+      listNodes.push(...jobs.nodes, el('p', { class: 'hint' }, t.staleHint));
     }
     list.replaceChildren(...listNodes);
+    if (keepFocus) pasteButton.focus();
   }
 
   function handleText(pasted: string): void {
@@ -356,8 +414,11 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
       render();
       return;
     }
+    const firstAccount = Object.keys(state.villages).length === 0;
     const { state: next, outcome } = upsertVillage(state, result.village);
     state = next;
+    if (outcome === 'added' && firstAccount && !anyAlertOn(settings)) nudge = true;
+    clipboardFailed = false;
     keptNewer = outcome === 'kept-newer';
     unreadable = false;
     persist();
@@ -376,9 +437,14 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
       if (target && target.textContent !== label) target.textContent = label;
     }
     const village = active();
-    if (village && accountLine) {
-      const label = accountText(village);
-      if (accountLine.textContent !== label) accountLine.textContent = label;
+    if (village && agoNode) {
+      const label = agoText(village);
+      if (agoNode.data !== label) agoNode.data = label;
+    }
+    const countdown = root.querySelector<HTMLElement>('[data-ends-at-next]');
+    if (countdown) {
+      const label = formatCountdown(remainingSeconds(Number(countdown.dataset.endsAtNext), now), language());
+      if (countdown.textContent !== label) countdown.textContent = label;
     }
     const nowSec = now / 1000;
     const due = finishedBetween(Object.values(state.villages), lastCheckSec, nowSec);
@@ -393,6 +459,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
       pasted = await deps.readClipboard();
     } catch {
       resetMessages();
+      clipboardFailed = true;
       errorText = text().error.clipboard;
       render();
       return;
@@ -403,12 +470,13 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   const onClick = (event: Event): void => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    const tag = target.closest<HTMLElement>('button[data-tag]')?.dataset.tag;
-    if (tag !== undefined) {
-      state = { ...state, activeTag: tag };
-    } else {
+    if (target.closest('button[data-action="open-alerts"]')) {
+      openSettings();
       return;
     }
+    const tag = target.closest<HTMLElement>('button[data-tag]')?.dataset.tag;
+    if (tag === undefined) return;
+    state = { ...state, activeTag: tag };
     resetMessages();
     persist();
     render();

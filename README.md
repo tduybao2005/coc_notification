@@ -27,7 +27,7 @@ App có tiếng Việt và tiếng Anh. Mặc định app theo ngôn ngữ của
 
 ## Thông báo
 
-Trong phần Thông báo, bạn chọn một hoặc nhiều kiểu báo: giọng nói, tiếng ting, rung, hiện thông báo trên màn hình. Hiện tại app chỉ báo khi đang mở; tắt màn hình hoặc chuyển sang app khác thì sẽ không báo.
+Trong Cài đặt, mục Thông báo, bạn chọn một hoặc nhiều kiểu báo: giọng nói, tiếng ting, rung, hiện thông báo trên màn hình. Hiện tại app chỉ báo khi đang mở; tắt màn hình hoặc chuyển sang app khác thì sẽ không báo.
 
 Giọng đọc "Có công trình vừa hoàn thành" là giọng tổng hợp của Piper, dùng giọng `vi_VN-vais1000-medium` huấn luyện từ bộ dữ liệu VAIS-1000 (CC BY). Chi tiết nằm trong `public/licenses/vais1000-voice.txt`.
 
