@@ -16,7 +16,7 @@ export interface SettingsView {
   element: HTMLElement;
   // Where the app puts the alert notices while this screen is open.
   notices: HTMLElement;
-  update(view: { settings: AlertSettings; lang: Language; hasAccount: boolean }): void;
+  update(view: { settings: AlertSettings; lang: Language; accountTag: string | null }): void;
   // Disables the banner switch while the permission prompt is pending.
   lockBanner(locked: boolean): void;
   focusBack(): void;
@@ -67,12 +67,15 @@ export function createSettingsView(handlers: SettingsHandlers): SettingsView {
   test.addEventListener('click', () => handlers.onTest());
   const limit = el('p', { 'data-role': 'alerts-limit', class: 'hint' });
 
-  // The account section exists only while there is an account.
+  // The account section exists only while there is an account; it names the one that Delete removes.
   const accountTitle = el('h2');
   const remove = el('button', { type: 'button', 'data-action': 'delete', class: 'danger' });
   remove.addEventListener('click', () => handlers.onDelete());
+  const accountTag = el('span', { 'data-role': 'account-tag' });
+  const accountRow = el('div', { class: 'account-row' });
+  accountRow.append(accountTag, remove);
   const account = el('section');
-  account.append(accountTitle, remove);
+  account.append(accountTitle, accountRow);
 
   const languageSection = el('section');
   languageSection.append(languageTitle, languageGroup);
@@ -83,7 +86,7 @@ export function createSettingsView(handlers: SettingsHandlers): SettingsView {
   return {
     element,
     notices,
-    update({ settings, lang, hasAccount }) {
+    update({ settings, lang, accountTag: tag }) {
       const text = copy[lang];
       back.setAttribute('aria-label', text.settings.back);
       title.textContent = text.settings.title;
@@ -99,7 +102,8 @@ export function createSettingsView(handlers: SettingsHandlers): SettingsView {
       limit.textContent = text.alerts.limit;
       accountTitle.textContent = text.settings.account;
       remove.textContent = text.delete;
-      if (hasAccount) element.append(account);
+      accountTag.textContent = tag;
+      if (tag !== null) element.append(account);
       else account.remove();
     },
     lockBanner(locked) { inputs.banner.disabled = locked; },

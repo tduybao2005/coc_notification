@@ -1,6 +1,6 @@
 # Village Timer: Hai ngôn ngữ và giao diện mới
 
-**Ngày:** 2026-11-06. **Trạng thái:** chờ người dùng duyệt.
+**Ngày:** 2026-11-06. **Trạng thái:** đã được người dùng duyệt.
 
 Spec này nối tiếp Phần 1 (`2026-11-06-reliable-storage-and-foreground-alerts-design.md`) và được làm trước Phần 2 (app Android). Nó thay thế các mục sau của Phần 1: khối `details` ở mục 6, vị trí nút dán, và lời gợi ý tự mở bảng thông báo.
 
@@ -276,7 +276,7 @@ Dòng tài khoản gồm tag, `exportedAgo`, và `exportedAt` trong `.export-at`
 | Công tắc thông báo | Bốn `input[name="alert-*"]` như Phần 1, vẽ thành công tắc gạt |
 | Nút thử | `button[data-action="test-alert"]` |
 | Ghi chú giới hạn | `[data-role="alerts-limit"]` |
-| Xóa tài khoản đang xem | `button[data-action="delete"]`, chỉ hiện khi có tài khoản |
+| Xóa tài khoản đang xem | Một hàng trong khung: mã tag của tài khoản đang xem (`[data-role="account-tag"]`) bên trái, `button[data-action="delete"]` bên phải; chỉ hiện khi có tài khoản |
 
 Nút chọn ngôn ngữ là hai ô `Tiếng Việt` và `English`, ô đang chọn theo ngôn ngữ hiệu lực. Hai nhãn này không dịch. Khi `settings.language` là `null`, ô đúng với ngôn ngữ máy vẫn được chọn, và giá trị lưu vẫn là `null` cho đến khi người dùng bấm.
 
@@ -299,7 +299,7 @@ export interface SettingsHandlers {
 export interface SettingsView {
   element: HTMLElement;
   notices: HTMLElement;
-  update(view: { settings: AlertSettings; lang: Language; hasAccount: boolean }): void;
+  update(view: { settings: AlertSettings; lang: Language; accountTag: string | null }): void;
   lockBanner(locked: boolean): void;
   focusBack(): void;
 }

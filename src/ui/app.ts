@@ -127,13 +127,13 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
     el('p', { class: 'note', 'data-notice': kind, role: 'status' }, message);
 
   // The tag (only when there is one account: with several, the chips already show it), how long ago the
-  // data was exported, and the export time, which only wide screens show.
+  // data was exported, and the export time, which only wide screens show (on a line of its own).
   function accountRow(village: Village, withTag: boolean): HTMLElement {
     const line = el('span');
     if (withTag) line.append(el('b', {}, village.tag), ' · ');
     agoNode = document.createTextNode(agoText(village));
     const when = text().exportedAt.replace('{time}', formatEnd(village.exportedAt, language()));
-    line.append(agoNode, el('span', { class: 'export-at' }, ` · ${when}`));
+    line.append(agoNode, el('span', { class: 'export-at' }, when));
     const row = el('div', { class: 'account' });
     row.append(line);
     return row;
@@ -339,7 +339,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
     applyStaticText();
     mainView.hidden = view !== 'main';
     settingsView.element.hidden = view !== 'settings';
-    settingsView.update({ settings, lang, hasAccount: active() !== undefined });
+    settingsView.update({ settings, lang, accountTag: active()?.tag ?? null });
     settingsView.notices.replaceChildren(...(view === 'settings' ? alertNotices() : []));
     const t = text();
     const village = active();
@@ -348,6 +348,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
     // Moving the button drops keyboard focus in a real browser, so give it back afterwards.
     const keepFocus = view === 'main' && document.activeElement === pasteButton;
     if (tags.length === 0) nudge = false;
+    layout.classList.toggle('single', tags.length === 0);
 
     const topNodes: HTMLElement[] = [];
     if (tags.length === 0) topNodes.push(stepsCard(t));

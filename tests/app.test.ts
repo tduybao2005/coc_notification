@@ -902,3 +902,32 @@ test('the account line is in English too', async () => {
   expect(root.querySelector('.account span')!.textContent).toContain('Exported 13m ago');
   expect(root.querySelector('.export-at')!.textContent).toContain('at ');
 });
+
+test('settings shows the tag of the account being viewed and follows the chips', async () => {
+  let clip = sample;
+  const root = await setup((T + 807) * 1000, { clip: async () => clip });
+  expect(root.querySelector('[data-view="settings"] [data-role="account-tag"]')).toBeNull();
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  const tag = () => root.querySelector('[data-view="settings"] [data-role="account-tag"]')!.textContent;
+  expect(tag()).toBe('#TEST123');
+  clip = account('#OTHER1', [{ data: 1000026, lvl: 1, timer: 5000 }]);
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  expect(tag()).toBe('#OTHER1');
+  click(root, 'button[data-tag="#TEST123"]');
+  expect(tag()).toBe('#TEST123');
+});
+
+test('the layout is a single column until there is an account', async () => {
+  const root = await setup((T + 807) * 1000);
+  expect(root.querySelector('.layout')!.classList.contains('single')).toBe(true);
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  expect(root.querySelector('.layout')!.classList.contains('single')).toBe(false);
+});
+
+test('the export time has no dangling separator', async () => {
+  const root = await pasted((T + 807) * 1000);
+  expect(root.querySelector('.export-at')!.textContent).toMatch(/^lúc \d/);
+});
