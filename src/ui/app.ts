@@ -1,7 +1,8 @@
 import { alertMessage, allFinished, finishedBetween, type AlertMessage } from '../core/alerts';
 import { jobDetailText, jobName } from '../core/names';
 import { parseExport } from '../core/parse';
-import { saveSettings, type AlertSettings } from '../core/settings';
+import type { Language } from '../core/language';
+import { anyAlertOn, saveSettings, type Settings } from '../core/settings';
 import {
   removeVillage, saveState, upsertVillage, type AppState, type KeyValueStore, type LoadResult,
 } from '../core/store';
@@ -11,13 +12,14 @@ import {
 import type { Village } from '../core/types';
 import type { AlertOutput, Sound } from '../platform/alert-output';
 import { createAlertsPanel, type AlertKey } from './alerts-panel';
-import { copy } from './copy';
+import { copy, type Copy } from './copy';
 import { el } from './dom';
 
 export interface AppDeps {
   store: KeyValueStore;
   loaded: LoadResult;
-  settings: AlertSettings;
+  settings: Settings;
+  deviceLanguage: Language;
   output: AlertOutput;
   now: () => number;
   readClipboard: () => Promise<string>;
@@ -34,7 +36,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   let soundFailed = false;
   let soundPlaying = false;
   // The banner switch only counts as on while the browser still grants permission.
-  let settings: AlertSettings = {
+  let settings: Settings = {
     ...deps.settings,
     banner: deps.settings.banner && deps.output.bannerPermission() === 'granted',
   };
@@ -44,11 +46,14 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   let finishedCount = 0;
   let accountLine: HTMLElement | null = null;
 
+  const language = (): Language => settings.language ?? deps.deviceLanguage;
+  const text = (): Copy => copy[language()];
+
   const top = el('div');
   const list = el('div');
-  const pasteButton = el('button', { type: 'button', 'data-action': 'paste' }, copy.paste);
+  const pasteButton = el('button', { type: 'button', 'data-action': 'paste' }, text().paste);
   const box = el('textarea', {
-    name: 'export', rows: '3', placeholder: copy.placeholder, 'aria-label': copy.placeholder,
+    name: 'export', rows: '3', placeholder: text().placeholder, 'aria-label': text().placeholder,
     autocomplete: 'off', spellcheck: 'false',
   });
   const controls = el('div', { class: 'controls' });
@@ -57,29 +62,31 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   const panel = createAlertsPanel({
     onToggle: (key, on) => onToggle(key, on),
     onTest: () => {
-      if (Object.values(settings).some(Boolean)) {
-        void fireAlert({ title: copy.alerts.testTitle, body: copy.alerts.testBody });
+      if (anyAlertOn(settings)) {
+        void fireAlert({ title: text().alerts.testTitle, body: text().alerts.testBody });
       }
     },
-  });
+  }, text());
   panel.update(settings);
 
   const footer = el('footer');
   const credit = el('p');
   const voiceCredit = el('p');
   // Relative hrefs so the links also work when the app is served from a sub-path (GitHub Pages).
-  credit.append(el('a', { href: 'licenses/clash-of-clans-data.txt' }, copy.credit));
-  voiceCredit.append(el('a', { href: 'licenses/vais1000-voice.txt' }, copy.voiceCredit));
-  footer.append(el('p', {}, copy.privacy), el('p', {}, copy.disclaimer), credit, voiceCredit);
+  credit.append(el('a', { href: 'licenses/clash-of-clans-data.txt' }, text().credit));
+  voiceCredit.append(el('a', { href: 'licenses/vais1000-voice.txt' }, text().voiceCredit));
+  footer.append(el('p', {}, text().privacy), el('p', {}, text().disclaimer), credit, voiceCredit);
 
-  root.replaceChildren(el('h1', {}, copy.title), top, controls, panel.element, list, footer);
+  root.replaceChildren(el('h1', {}, text().title), top, controls, panel.element, list, footer);
 
   const active = (): Village | undefined => (state.activeTag === null ? undefined : state.villages[state.activeTag]);
   const accountText = (village: Village) => {
-    const ago = formatAgo(Math.max(0, deps.now() / 1000 - village.exportedAt));
-    return `${village.tag} · ${copy.exportedAt.replace('{time}', formatEnd(village.exportedAt)).replace('{ago}', ago)}`;
+    const lang = language();
+    const ago = formatAgo(Math.max(0, deps.now() / 1000 - village.exportedAt), lang);
+    const when = text().exportedAt.replace('{time}', formatEnd(village.exportedAt, lang)).replace('{ago}', ago);
+    return `${village.tag} · ${when}`;
   };
-  const notice = (kind: string, text: string) => el('p', { 'data-notice': kind, role: 'status' }, text);
+  const notice = (kind: string, message: string) => el('p', { 'data-notice': kind, role: 'status' }, message);
 
   // Saves without waiting, so the screen never stalls on storage. The notice appears or clears when
   // the result arrives, and only a change in the result triggers a redraw.
@@ -187,6 +194,9 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   }
 
   function render(): void {
+    const lang = language();
+    document.documentElement.lang = lang;
+    const t = text();
     const village = active();
     const now = deps.now();
     const tags = Object.keys(state.villages);
@@ -194,7 +204,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
     const topNodes: HTMLElement[] = [];
     if (tags.length === 0) {
       const help = el('div', { 'data-role': 'help' });
-      help.append(el('p', {}, copy.help1), el('p', {}, copy.help2), el('p', {}, copy.help3));
+      help.append(el('p', {}, t.help1), el('p', {}, t.help2), el('p', {}, t.help3));
       topNodes.push(help);
     }
     if (tags.length >= 2) {
@@ -210,25 +220,25 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
     if (village) {
       const header = el('div', { class: 'account' });
       accountLine = el('span', {}, accountText(village));
-      header.append(accountLine, el('button', { type: 'button', 'data-action': 'delete' }, copy.delete));
-      topNodes.push(header, el('p', { class: 'hint' }, copy.staleHint));
+      header.append(accountLine, el('button', { type: 'button', 'data-action': 'delete' }, t.delete));
+      topNodes.push(header, el('p', { class: 'hint' }, t.staleHint));
     }
     if (errorText !== null) topNodes.push(notice('error', errorText));
-    if (keptNewer) topNodes.push(notice('kept-newer', copy.notice['kept-newer']));
-    if (stateSaveFailed || settingsSaveFailed) topNodes.push(notice('storage', copy.notice.storage));
-    if (unreadable) topNodes.push(notice('unreadable', copy.notice.unreadable));
-    if (village && allFinished(village.jobs, now)) topNodes.push(notice('all-finished', copy.notice['all-finished']));
-    if (needsTap()) topNodes.push(notice('needs-tap', copy.notice['needs-tap']));
-    if (bannerDenied) topNodes.push(notice('banner-denied', copy.notice['banner-denied']));
-    if (soundFailed) topNodes.push(notice('sound-failed', copy.notice['sound-failed']));
-    if (village?.hasBoosts) topNodes.push(notice('boost', copy.notice.boost));
-    if (village && deviceClockBehind(village.exportedAt, now)) topNodes.push(notice('clock', copy.notice.clock));
+    if (keptNewer) topNodes.push(notice('kept-newer', t.notice['kept-newer']));
+    if (stateSaveFailed || settingsSaveFailed) topNodes.push(notice('storage', t.notice.storage));
+    if (unreadable) topNodes.push(notice('unreadable', t.notice.unreadable));
+    if (village && allFinished(village.jobs, now)) topNodes.push(notice('all-finished', t.notice['all-finished']));
+    if (needsTap()) topNodes.push(notice('needs-tap', t.notice['needs-tap']));
+    if (bannerDenied) topNodes.push(notice('banner-denied', t.notice['banner-denied']));
+    if (soundFailed) topNodes.push(notice('sound-failed', t.notice['sound-failed']));
+    if (village?.hasBoosts) topNodes.push(notice('boost', t.notice.boost));
+    if (village && deviceClockBehind(village.exportedAt, now)) topNodes.push(notice('clock', t.notice.clock));
     top.replaceChildren(...topNodes);
 
     const listNodes: HTMLElement[] = [];
     finishedCount = 0;
     if (village) {
-      if (village.jobs.length === 0) listNodes.push(el('p', { 'data-role': 'no-jobs' }, copy.noJobs));
+      if (village.jobs.length === 0) listNodes.push(el('p', { 'data-role': 'no-jobs' }, t.noJobs));
       for (const { group, jobs } of groupJobs(village.jobs, now)) {
         const section = el('section');
         const items = el('ul');
@@ -237,25 +247,25 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
           if (left === 0) finishedCount += 1;
           const item = el('li', { 'data-ends-at': String(job.endsAt) });
           item.append(
-            el('span', { class: 'job-name' }, jobName(job)),
-            el('span', { class: 'job-remaining' }, formatRemaining(left)),
-            el('span', { class: 'job-detail' }, jobDetailText(job.detail, 'vi')),
-            el('span', { class: 'job-end' }, formatEnd(job.endsAt)),
+            el('span', { class: 'job-name' }, jobName(job, lang)),
+            el('span', { class: 'job-remaining' }, formatRemaining(left, lang)),
+            el('span', { class: 'job-detail' }, jobDetailText(job.detail, lang)),
+            el('span', { class: 'job-end' }, formatEnd(job.endsAt, lang)),
           );
           items.append(item);
         }
-        section.append(el('h2', {}, copy.groups[group]), items);
+        section.append(el('h2', {}, t.groups[group]), items);
         listNodes.push(section);
       }
     }
     list.replaceChildren(...listNodes);
   }
 
-  function handleText(text: string): void {
+  function handleText(pasted: string): void {
     resetMessages();
-    const result = parseExport(text);
+    const result = parseExport(pasted);
     if (!result.ok) {
-      errorText = copy.error[result.error];
+      errorText = text().error[result.error];
       render();
       return;
     }
@@ -263,7 +273,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
     const { state: next, outcome } = upsertVillage(state, result.village);
     state = next;
     // A one-time hint after the very first paste, for people who have not chosen any alert yet.
-    if (outcome === 'added' && firstAccount && !Object.values(settings).some(Boolean)) panel.open();
+    if (outcome === 'added' && firstAccount && !anyAlertOn(settings)) panel.open();
     keptNewer = outcome === 'kept-newer';
     unreadable = false;
     persist();
@@ -278,32 +288,32 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
       const left = remainingSeconds(Number(item.dataset.endsAt), now);
       if (left === 0) finished += 1;
       const target = item.querySelector('.job-remaining');
-      const text = formatRemaining(left);
-      if (target && target.textContent !== text) target.textContent = text;
+      const label = formatRemaining(left, language());
+      if (target && target.textContent !== label) target.textContent = label;
     }
     const village = active();
     if (village && accountLine) {
-      const text = accountText(village);
-      if (accountLine.textContent !== text) accountLine.textContent = text;
+      const label = accountText(village);
+      if (accountLine.textContent !== label) accountLine.textContent = label;
     }
     const nowSec = now / 1000;
     const due = finishedBetween(Object.values(state.villages), lastCheckSec, nowSec);
     lastCheckSec = Math.max(lastCheckSec, nowSec);
-    if (due.length > 0) void fireAlert(alertMessage(due));
+    if (due.length > 0) void fireAlert(alertMessage(due, language()));
     if (finished !== finishedCount) render();
   }
 
   async function onPaste(): Promise<void> {
-    let text: string;
+    let pasted: string;
     try {
-      text = await deps.readClipboard();
+      pasted = await deps.readClipboard();
     } catch {
       resetMessages();
-      errorText = copy.error.clipboard;
+      errorText = text().error.clipboard;
       render();
       return;
     }
-    handleText(text);
+    handleText(pasted);
   }
 
   const onClick = (event: Event): void => {

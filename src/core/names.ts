@@ -4,12 +4,15 @@ import type { Job, JobDetail } from './types';
 
 const table: Record<string, string> = names;
 
-export function nameOf(id: number): string {
-  return table[String(id)] ?? `Không rõ (#${id})`;
+// Item names exist in English only; the language only changes the fallback for an id that is not in the table.
+export function nameOf(id: number, lang: Language): string {
+  return table[String(id)] ?? `${lang === 'vi' ? 'Không rõ' : 'Unknown'} (#${id})`;
 }
 
-export function jobName(job: Pick<Job, 'id' | 'parentId'>): string {
-  return job.parentId === undefined ? nameOf(job.id) : `${nameOf(job.parentId)} — ${nameOf(job.id)}`;
+export function jobName(job: Pick<Job, 'id' | 'parentId'>, lang: Language): string {
+  return job.parentId === undefined
+    ? nameOf(job.id, lang)
+    : `${nameOf(job.parentId, lang)} — ${nameOf(job.id, lang)}`;
 }
 
 export function jobDetailText(detail: JobDetail, lang: Language): string {

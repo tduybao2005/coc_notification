@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import { STORAGE_KEY, loadState, type KeyValueStore } from '../src/core/store';
-import { DEFAULT_SETTINGS, loadSettings, type AlertSettings } from '../src/core/settings';
+import type { Language } from '../src/core/language';
+import { DEFAULT_SETTINGS, loadSettings, type AlertSettings, type Settings } from '../src/core/settings';
 import type { AlertOutput } from '../src/platform/alert-output';
 import { mountApp, type AppDeps } from '../src/ui/app';
 import { fakeOutput, memoryStore } from './helpers';
@@ -13,7 +14,8 @@ let unmount: (() => void) | undefined;
 let store: KeyValueStore;
 
 async function setup(clockMs: number, opts: {
-  clip?: AppDeps['readClipboard']; store?: KeyValueStore; settings?: AlertSettings; output?: AlertOutput;
+  clip?: AppDeps['readClipboard']; store?: KeyValueStore; settings?: Settings; output?: AlertOutput;
+  deviceLanguage?: Language;
 } = {}) {
   document.body.innerHTML = '<div id="app"></div>';
   const useStore = opts.store ?? store;
@@ -21,6 +23,7 @@ async function setup(clockMs: number, opts: {
     store: useStore,
     loaded: await loadState(useStore),
     settings: opts.settings ?? await loadSettings(useStore),
+    deviceLanguage: opts.deviceLanguage ?? 'vi',
     output: opts.output ?? fakeOutput(),
     now: () => Date.now(),
     readClipboard: opts.clip ?? (async () => sample),
@@ -53,7 +56,7 @@ test('pasting shows every job with remaining time and end time', async () => {
   expect(root.querySelector('h2')!.textContent).toBe('Làng chính · Công trình');
   const barracks = row(root, 'Dark Barracks');
   expect(barracks.querySelector('.job-detail')!.textContent).toBe('Cấp 12 → 13');
-  expect(remaining(barracks)).toBe('4 ngày 15 giờ 1 phút');
+  expect(remaining(barracks)).toBe('4 ngày 15 giờ');
   expect(root.textContent).toContain('13 phút trước');
 });
 
@@ -61,9 +64,18 @@ test('remaining time ticks every second', async () => {
   const root = await setup((T + 807) * 1000);
   click(root, 'button[data-action="paste"]');
   await flush();
-  expect(remaining(row(root, 'Workshop'))).toBe('14 giờ 59 phút 12 giây');
+  expect(remaining(row(root, 'Workshop'))).toBe('14 giờ 59 phút');
   await vi.advanceTimersByTimeAsync(1000);
-  expect(remaining(row(root, 'Workshop'))).toBe('14 giờ 59 phút 11 giây');
+  expect(remaining(row(root, 'Workshop'))).toBe('14 giờ 59 phút');
+});
+
+test('remaining time under a minute shows seconds and ticks', async () => {
+  const root = await setup((T + 54700) * 1000);
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  expect(remaining(row(root, 'Workshop'))).toBe('59 giây');
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(remaining(row(root, 'Workshop'))).toBe('58 giây');
 });
 
 test('reopening restores data, and finished jobs stay visible', async () => {
@@ -178,7 +190,7 @@ test('unreadable saved data asks for a new paste, and a good paste clears it', a
   expect(rows(root)).toHaveLength(13);
 });
 
-const on = (over: Partial<AlertSettings>): AlertSettings => ({ ...DEFAULT_SETTINGS, ...over });
+const on = (over: Partial<AlertSettings>): Settings => ({ ...DEFAULT_SETTINGS, ...over });
 const all = on({ banner: true, vibrate: true, ting: true, voice: true });
 const twoJobs = JSON.stringify({ tag: '#TEST123', timestamp: T, buildings: [
   { data: 1000026, lvl: 1, timer: 100 }, { data: 1000059, lvl: 1, timer: 100 }] });
@@ -505,4 +517,26 @@ test('nothing fires after unmount', async () => {
   unmount!();
   await vi.advanceTimersByTimeAsync(5000);
   expect(output.calls).toEqual([]);
+});
+
+const VIETNAMESE = /[ăâđêôơưàáạảãèéẹẻẽìíịỉĩòóọỏõùúụủũỳýỵỷỹ]/i;
+
+test('english mode shows no Vietnamese, pasted data included', async () => {
+  const root = await pasted((T + 807) * 1000, { deviceLanguage: 'en' });
+  expect(root.textContent).not.toMatch(VIETNAMESE);
+  expect(document.documentElement.lang).toBe('en');
+  expect(row(root, 'Workshop').querySelector('.job-detail')!.textContent).toBe('Level 6 → 7');
+});
+
+test('a saved language wins over the device', async () => {
+  const root = await setup(T * 1000, { deviceLanguage: 'en', settings: { ...DEFAULT_SETTINGS, language: 'vi' } });
+  expect(root.textContent).toContain('Dữ liệu chỉ lưu trên máy này');
+  expect(document.documentElement.lang).toBe('vi');
+});
+
+test('a finished job alerts in the current language', async () => {
+  const output = fakeOutput();
+  await pasted((T + 54757) * 1000, { output, deviceLanguage: 'en', settings: on({ banner: true }) });
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(output.calls).toEqual(['banner:Workshop finished']);
 });

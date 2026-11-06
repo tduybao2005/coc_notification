@@ -1,5 +1,6 @@
 import { registerSW } from 'virtual:pwa-register';
 import './ui/style.css';
+import { deviceLanguage } from './core/language';
 import { loadSettings } from './core/settings';
 import { loadState } from './core/store';
 import { browserAlertOutput } from './platform/alert-output';
@@ -14,6 +15,7 @@ mountApp(document.getElementById('app')!, {
   store,
   loaded,
   settings,
+  deviceLanguage: deviceLanguage(navigator.language),
   output: browserAlertOutput(import.meta.env.BASE_URL),
   now: Date.now,
   readClipboard: () => navigator.clipboard.readText(),

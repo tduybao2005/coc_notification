@@ -1,3 +1,4 @@
+import type { Language } from './language';
 import { jobDetailText, jobName } from './names';
 import { remainingSeconds } from './time';
 import type { Job, Village } from './types';
@@ -25,13 +26,27 @@ export function finishedBetween(villages: Village[], fromSec: number, toSec: num
   return found;
 }
 
-export function alertMessage(finished: FinishedJob[]): AlertMessage {
+export function alertMessage(finished: FinishedJob[], lang: Language): AlertMessage {
+  const vi = lang === 'vi';
   if (finished.length === 1) {
     const { tag, job } = finished[0];
-    return { title: `${jobName(job)} đã xong`, body: `${jobDetailText(job.detail, 'vi')} · ${tag}` };
+    return {
+      title: `${jobName(job, lang)} ${vi ? 'đã xong' : 'finished'}`,
+      body: `${jobDetailText(job.detail, lang)} · ${tag}`,
+    };
   }
   return {
-    title: `${finished.length} hạng mục đã xong`,
-    body: finished.map(({ job }) => jobName(job)).join(', '),
+    title: vi ? `${finished.length} hạng mục đã xong` : `${finished.length} items finished`,
+    body: finished.map(({ job }) => jobName(job, lang)).join(', '),
   };
+}
+
+// The running job that ends soonest, helper cooldowns excluded; null when nothing is running.
+export function nextJob(jobs: Job[], nowMs: number): Job | null {
+  let best: Job | null = null;
+  for (const job of jobs) {
+    if (job.group === 'helper' || remainingSeconds(job.endsAt, nowMs) === 0) continue;
+    if (best === null || job.endsAt < best.endsAt) best = job;
+  }
+  return best;
 }
