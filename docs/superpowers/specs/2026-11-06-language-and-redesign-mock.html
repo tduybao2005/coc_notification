@@ -1,0 +1,166 @@
+<style>
+  .wall { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 22px 16px; align-items: start; }
+  .cap { font-size: 13px; font-weight: 600; margin: 0 0 8px; text-align: center; }
+  .vt { --bg:#0e1116; --surface:#161a21; --line:#242a34; --ink:#eef1f6; --muted:#8b95a7; --accent:#6cb2ff; --on:#08111f; --warn:#f2b84b; --bad:#ff7a7a;
+        width: 100%; max-width: 310px; margin: 0 auto; border-radius: 24px; overflow: hidden; background: var(--bg); color: var(--ink);
+        font: 14px/1.35 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-variant-numeric: tabular-nums;
+        box-shadow: 0 0 0 1px #2a313d, 0 10px 26px rgba(0,0,0,.25); text-align: left; }
+  .vt * { box-sizing: border-box; }
+  .vt.wide { max-width: 980px; border-radius: 14px; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 15px 6px; }
+  .brand { font-weight: 700; font-size: 15px; letter-spacing: -.01em; }
+  .icon { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; color: var(--muted); border: 1px solid var(--line); background: var(--surface); flex: none; }
+  .icon svg { width: 16px; height: 16px; }
+  .meta { display: flex; justify-content: space-between; gap: 10px; padding: 0 15px 10px; color: var(--muted); font-size: 12px; }
+  .meta b { color: var(--ink); font-size: 13px; }
+  .chips { display: flex; gap: 6px; padding: 2px 15px 8px; }
+  .chip { padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  .chip.on { border-color: var(--accent); color: var(--accent); }
+  .note { margin: 0 12px 10px; padding: 8px 11px; border-radius: 10px; background: #221d10; border: 1px solid #4a3b16; color: #f6dc9f; font-size: 12.5px; }
+  .hero { margin: 0 12px; padding: 13px 15px 14px; border-radius: 15px; background: var(--surface); border: 1px solid #2b3442; }
+  .eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--accent); }
+  .count { font-size: 38px; line-height: 1.1; font-weight: 700; letter-spacing: -.02em; margin: 6px 0 4px; }
+  .what { font-weight: 600; } .when { font-size: 12px; color: var(--muted); }
+  .nudge { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 12px 0; padding: 9px 11px; border-radius: 11px; border: 1px dashed #2f3a4b; font-size: 12.5px; color: var(--muted); }
+  .nudge b { color: var(--accent); font-weight: 600; white-space: nowrap; }
+  .group { margin: 15px 15px 6px; display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+  .list { margin: 0 12px; border-radius: 13px; background: var(--surface); border: 1px solid var(--line); overflow: hidden; }
+  .row { display: grid; grid-template-columns: 1fr auto; gap: 1px 10px; padding: 8px 12px; border-top: 1px solid var(--line); }
+  .row:first-child { border-top: 0; }
+  .name, .left { font-weight: 600; } .left, .end { text-align: right; }
+  .sub, .end { font-size: 11.5px; color: var(--muted); }
+  .bar { margin-top: 13px; padding: 10px 12px 13px; border-top: 1px solid var(--line); }
+  .btn { display: block; width: 100%; padding: 10px; border-radius: 11px; background: var(--accent); color: var(--on); font-weight: 650; text-align: center; }
+  .ghost { display: inline-block; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-weight: 600; font-size: 13px; }
+  .box { margin-top: 8px; padding: 9px 11px; min-height: 52px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-size: 13px; }
+  .steps { margin: 4px 12px 0; padding: 13px 15px; border-radius: 15px; background: var(--surface); border: 1px solid var(--line); }
+  .steps h4 { margin: 0 0 9px; font-size: 16px; }
+  .step { display: flex; gap: 10px; margin-top: 9px; font-size: 13px; color: #cdd3de; }
+  .num { flex: none; width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center; background: #1f2a3a; color: var(--accent); font-size: 11.5px; font-weight: 700; }
+  .sect { margin: 14px 15px 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; margin: 0 12px; padding: 3px; gap: 3px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+  .seg span { padding: 8px; border-radius: 9px; text-align: center; font-weight: 600; color: var(--muted); font-size: 13px; }
+  .seg .on { background: #233246; color: var(--ink); }
+  .opt { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--line); font-size: 13.5px; }
+  .opt:first-child { border-top: 0; }
+  .sw { flex: none; width: 36px; height: 21px; border-radius: 999px; background: #2b3340; position: relative; }
+  .sw::after { content: ''; position: absolute; top: 2.5px; left: 2.5px; width: 16px; height: 16px; border-radius: 50%; background: #aab3c2; }
+  .sw.on { background: var(--accent); } .sw.on::after { left: 17.5px; background: #08111f; }
+  .limit { margin: 8px 15px 0; font-size: 11.5px; color: var(--muted); }
+  .danger { color: var(--bad); font-weight: 600; font-size: 13px; }
+  .upd { display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--accent); font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+  .upd svg { width: 13px; height: 13px; }
+  .meta { align-items: center; }
+  .hero .btn { margin-top: 12px; }
+  .cols { display: grid; grid-template-columns: 340px 1fr; gap: 6px; padding: 0 12px 14px; align-items: start; }
+  .cols .hero, .cols .list, .cols .note { margin: 0; }
+  .cols .group { margin: 12px 4px 6px; } .cols .group:first-child { margin-top: 0; }
+  .cols .bar { margin-top: 10px; padding: 0; border: 0; }
+</style>
+
+<h2>Giao diện A, nút dán đã chuyển chỗ</h2>
+<p class="subtitle">Dữ liệu đã lưu sẵn nên không cần dán mỗi lần mở. Nút dán giờ là nút nhỏ "Dán mới" nằm ngay cạnh dòng cho biết dữ liệu cũ bao lâu. Chỉ khi chưa có dữ liệu hoặc mọi thứ đã xong thì nút lớn mới xuất hiện.</p>
+
+<div class="wall">
+
+  <div>
+    <p class="cap">1. Lần đầu mở app</p>
+    <div class="vt">
+      <div class="top"><span class="brand">Village Timer</span><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></span></div>
+      <div class="steps"><h4>Bắt đầu trong 3 bước</h4>
+        <div class="step"><span class="num">1</span><span>Trong game, mở Settings → More Settings → Data Export rồi bấm Copy.</span></div>
+        <div class="step"><span class="num">2</span><span>Quay lại đây và bấm "Dán dữ liệu".</span></div>
+        <div class="step"><span class="num">3</span><span>Cài app: trên Android mở menu Chrome và chọn Thêm vào màn hình chính.</span></div>
+      </div>
+      <div class="bar"><div class="btn">Dán dữ liệu</div><div class="box">Hoặc dán dữ liệu vào đây</div></div>
+    </div>
+  </div>
+
+  <div>
+    <p class="cap">2. Màn hình cài đặt</p>
+    <div class="vt">
+      <div class="top"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></span><span class="brand" style="flex:1">Cài đặt</span></div>
+      <div class="sect" style="margin-top:6px">Ngôn ngữ</div>
+      <div class="seg"><span class="on">Tiếng Việt</span><span>English</span></div>
+      <div class="sect">Thông báo</div>
+      <div class="list">
+        <div class="opt"><span>Giọng nói</span><span class="sw on"></span></div>
+        <div class="opt"><span>Tiếng ting</span><span class="sw on"></span></div>
+        <div class="opt"><span>Rung (trên điện thoại)</span><span class="sw"></span></div>
+        <div class="opt"><span>Hiện thông báo trên màn hình</span><span class="sw"></span></div>
+      </div>
+      <div style="padding:9px 12px 0"><span class="ghost">Thử</span></div>
+      <p class="limit">Hiện tại app chỉ báo khi đang mở. Trên Android, tắt màn hình hoặc chuyển sang app khác thì sẽ không báo.</p>
+      <div class="sect">Tài khoản</div>
+      <div class="list" style="margin-bottom:14px"><div class="opt"><span>#TEST123</span><span class="danger">Xóa</span></div></div>
+    </div>
+  </div>
+
+  <div>
+    <p class="cap">3. Nhiều tài khoản, có lời nhắc</p>
+    <div class="vt">
+      <div class="top"><span class="brand">Village Timer</span><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></span></div>
+      <div class="chips"><span class="chip on">#TEST123</span><span class="chip">#CLAN22</span></div>
+      <div class="meta"><span>Xuất 2 giờ trước</span><span class="upd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>Dán mới</span></div>
+      <div class="note">Chạm vào app một lần để bật âm thanh và rung.</div>
+      <div class="hero"><div class="eyebrow">Xong tiếp theo</div><div class="count">9:59:52</div><div class="what">Barbarian · Cấp 2 → 3</div><div class="when">19:54 Thứ 6, 06/11</div></div>
+      <div class="group"><span>Làng chính · Công trình</span><span>2</span></div>
+      <div class="list">
+        <div class="row"><span class="name">Workshop</span><span class="left">13 giờ 3 phút</span><span class="sub">Cấp 6 → 7</span><span class="end">22:58 Thứ 6</span></div>
+        <div class="row"><span class="name">Dark Barracks</span><span class="left">4 ngày 13 giờ</span><span class="sub">Cấp 12 → 13</span><span class="end">23:38 Thứ 3</span></div>
+      </div>
+      <div style="height:14px"></div>
+    </div>
+  </div>
+
+  <div>
+    <p class="cap">4. Chọn English, chưa bật thông báo</p>
+    <div class="vt">
+      <div class="top"><span class="brand">Village Timer</span><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></span></div>
+      <div class="meta" style="padding-top:2px"><span><b>#TEST123</b> · Exported 2h ago</span><span class="upd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>Paste new</span></div>
+      <div class="hero"><div class="eyebrow">Next up</div><div class="count">9:59:52</div><div class="what">Barbarian · Level 2 → 3</div><div class="when">19:54 Fri, 06/11</div></div>
+      <div class="nudge"><span>Get alerted when something finishes</span><b>Turn on</b></div>
+      <div class="group"><span>Home Village · Buildings</span><span>2</span></div>
+      <div class="list">
+        <div class="row"><span class="name">Workshop</span><span class="left">13h 3m</span><span class="sub">Level 6 → 7</span><span class="end">22:58 Fri</span></div>
+        <div class="row"><span class="name">Dark Barracks</span><span class="left">4d 13h</span><span class="sub">Level 12 → 13</span><span class="end">23:38 Tue</span></div>
+      </div>
+      <div style="height:14px"></div>
+    </div>
+  </div>
+
+  <div>
+    <p class="cap">5. Mọi hạng mục đã xong: lúc này mới cần dán</p>
+    <div class="vt">
+      <div class="top"><span class="brand">Village Timer</span><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></span></div>
+      <div class="meta" style="padding-top:2px"><span><b>#TEST123</b> · Xuất 3 ngày trước</span></div>
+      <div class="hero"><div class="eyebrow">Đã xong</div><div class="what" style="font-size:19px;margin-top:6px">Mọi hạng mục đã xong</div><div class="when" style="margin-top:3px">Hãy dán dữ liệu mới để cập nhật.</div><div class="btn">Dán dữ liệu mới</div></div>
+      <div class="group"><span>Làng chính · Công trình</span><span>1</span></div>
+      <div class="list" style="margin-bottom:14px"><div class="row"><span class="name">Workshop</span><span class="left">Đã xong</span><span class="sub">Cấp 6 → 7</span><span class="end">22:58 Thứ 6</span></div></div>
+    </div>
+  </div>
+
+</div>
+
+<p class="cap" style="margin-top:26px">6. Trên máy tính: hai cột, khối giờ đứng yên bên trái</p>
+<div class="vt wide">
+  <div class="top"><span class="brand">Village Timer</span><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></span></div>
+  <div class="meta"><span><b>#TEST123</b> · Xuất lúc 09:54 Thứ 6, 06/11 (2 giờ trước)</span><span class="upd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>Dán mới</span></div>
+  <div class="cols">
+    <div>
+      <div class="hero"><div class="eyebrow">Xong tiếp theo</div><div class="count">9:59:52</div><div class="what">Barbarian · Cấp 2 → 3</div><div class="when">19:54 Thứ 6, 06/11</div></div>
+    </div>
+    <div style="padding-left:10px">
+      <div class="group"><span>Làng chính · Công trình</span><span>3</span></div>
+      <div class="list">
+        <div class="row"><span class="name">Workshop</span><span class="left">13 giờ 3 phút</span><span class="sub">Cấp 6 → 7</span><span class="end">22:58 Thứ 6</span></div>
+        <div class="row"><span class="name">Scattershot</span><span class="left">22 giờ 29 phút</span><span class="sub">Cấp 2 → 3</span><span class="end">08:24 Thứ 7</span></div>
+        <div class="row"><span class="name">Dark Barracks</span><span class="left">4 ngày 13 giờ</span><span class="sub">Cấp 12 → 13</span><span class="end">23:38 Thứ 3</span></div>
+      </div>
+      <div class="group"><span>Làng chính · Nghiên cứu</span><span>1</span></div>
+      <div class="list">
+        <div class="row"><span class="name">Barbarian</span><span class="left">9 giờ 59 phút</span><span class="sub">Cấp 2 → 3</span><span class="end">19:54 Thứ 6</span></div>
+      </div>
+    </div>
+  </div>
+</div>
