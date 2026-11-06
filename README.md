@@ -8,6 +8,8 @@ Web app xem thời gian nâng cấp còn lại trong làng Clash of Clans. Dán 
 2. Mở app và bấm "Dán dữ liệu". Nếu trình duyệt không cho đọc clipboard, nhấn giữ vào ô nhập bên dưới và chọn Dán.
 3. Mỗi lần nâng cấp thêm hoặc dùng sách, búa, thuốc, gem, hãy dán dữ liệu mới để thời gian chính xác.
 
+Nếu lúc xuất đang có thuốc thợ xây, app tự tính phần thời gian được rút ngắn cho công trình, bẫy và anh hùng ở Làng chính. Các boost khác app chưa tính được: thời gian giữ nguyên số trong dữ liệu và app hiện cảnh báo.
+
 App nhớ được nhiều tài khoản; mỗi tài khoản là một tab theo tag.
 
 ## Cài app

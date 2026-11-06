@@ -24,6 +24,21 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const positive = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0;
 
+// A Builder Potion makes Home Village builders work ten times faster, and `timer` is the time left at
+// normal speed. Measured on two exports of one village 442 seconds apart during a potion: building
+// timers fell by 4366, research by 442, and builder_boost counted down in seconds.
+const BUILDER_POTION_SPEED = 10;
+const POTION_GROUPS: ReadonlySet<Group> = new Set<Group>(['home-build', 'home-hero']);
+
+// Entries of `boosts` that need no warning: the potion is counted in, the other is only a wait.
+const COUNTED_BOOSTS: ReadonlySet<string> = new Set(['builder_boost', 'clocktower_cooldown']);
+
+// Real seconds until a timer ends with `boost` seconds of potion left.
+function secondsWithPotion(timer: number, boost: number): number {
+  const covered = boost * BUILDER_POTION_SPEED;
+  return timer <= covered ? Math.ceil(timer / BUILDER_POTION_SPEED) : timer - covered + boost;
+}
+
 function detailOf(node: Record<string, unknown>, group: Group): JobDetail {
   if (group === 'helper') return { kind: 'cooldown' };
   const level = typeof node.lvl === 'number' ? node.lvl : 0;
@@ -32,9 +47,11 @@ function detailOf(node: Record<string, unknown>, group: Group): JobDetail {
   return { kind: 'upgrade', level };
 }
 
-function collectJobs(node: unknown, group: Group, parentId: number | undefined, timestamp: number, out: Job[]): void {
+type EndOf = (group: Group, seconds: number) => number;
+
+function collectJobs(node: unknown, group: Group, parentId: number | undefined, endOf: EndOf, out: Job[]): void {
   if (Array.isArray(node)) {
-    for (const item of node) collectJobs(item, group, parentId, timestamp, out);
+    for (const item of node) collectJobs(item, group, parentId, endOf, out);
     return;
   }
   if (!isRecord(node)) return;
@@ -42,15 +59,15 @@ function collectJobs(node: unknown, group: Group, parentId: number | undefined, 
   const id = typeof node.data === 'number' ? node.data : 0;
   const base = { id, ...(parentId === undefined ? {} : { parentId }) };
   if (positive(node.timer)) {
-    out.push({ ...base, group, detail: detailOf(node, group), endsAt: timestamp + node.timer });
+    out.push({ ...base, group, detail: detailOf(node, group), endsAt: endOf(group, node.timer) });
   }
   if (positive(node.helper_cooldown)) {
-    out.push({ ...base, group: 'helper', detail: detailOf(node, 'helper'), endsAt: timestamp + node.helper_cooldown });
+    out.push({ ...base, group: 'helper', detail: detailOf(node, 'helper'), endsAt: endOf('helper', node.helper_cooldown) });
   }
 
   const childParent = typeof node.data === 'number' ? node.data : parentId;
   for (const value of Object.values(node)) {
-    if (typeof value === 'object' && value !== null) collectJobs(value, group, childParent, timestamp, out);
+    if (typeof value === 'object' && value !== null) collectJobs(value, group, childParent, endOf, out);
   }
 }
 
@@ -73,11 +90,17 @@ export function parseExport(text: string): ParseResult {
     return { ok: false, error: 'not-export' };
   }
 
+  const { timestamp } = data;
+  const boosts = isRecord(data.boosts) ? data.boosts : {};
+  const potion = positive(boosts.builder_boost) ? boosts.builder_boost : 0;
+  const endOf: EndOf = (group, seconds) =>
+    timestamp + (POTION_GROUPS.has(group) ? secondsWithPotion(seconds, potion) : seconds);
+
   const jobs: Job[] = [];
   for (const [section, value] of Object.entries(data)) {
-    if (Array.isArray(value)) collectJobs(value, SECTION_GROUPS[section] ?? 'other', undefined, data.timestamp, jobs);
+    if (Array.isArray(value)) collectJobs(value, SECTION_GROUPS[section] ?? 'other', undefined, endOf, jobs);
   }
 
-  const hasBoosts = typeof data.boosts === 'object' && data.boosts !== null && Object.keys(data.boosts).length > 0;
-  return { ok: true, village: { tag: data.tag, exportedAt: data.timestamp, jobs, hasBoosts } };
+  const hasBoosts = Object.keys(boosts).some((key) => !COUNTED_BOOSTS.has(key));
+  return { ok: true, village: { tag: data.tag, exportedAt: timestamp, jobs, hasBoosts } };
 }
