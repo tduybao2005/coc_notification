@@ -50,8 +50,6 @@ const vi = {
     clock: 'Đồng hồ máy đang chậm hơn giờ game. Hãy chỉnh lại giờ của máy để thời gian còn lại chính xác.',
   },
   alerts: {
-    summaryOn: 'Thông báo · Đang bật',
-    summaryOff: 'Thông báo · Đang tắt',
     voice: 'Giọng nói',
     ting: 'Tiếng ting',
     vibrate: 'Rung (trên điện thoại)',
@@ -127,8 +125,6 @@ const en: Copy = {
     clock: "This device's clock is behind game time. Set the correct time so the remaining time is accurate.",
   },
   alerts: {
-    summaryOn: 'Alerts · On',
-    summaryOff: 'Alerts · Off',
     voice: 'Voice',
     ting: 'Ting sound',
     vibrate: 'Vibrate (on phones)',
@@ -156,3 +152,6 @@ const en: Copy = {
 };
 
 export const copy: Record<Language, Copy> = { vi, en };
+
+// The names of the languages are shown in their own language and are not translated.
+export const languageNames: Record<Language, string> = { vi: 'Tiếng Việt', en: 'English' };

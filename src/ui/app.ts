@@ -11,9 +11,10 @@ import {
 } from '../core/time';
 import type { Village } from '../core/types';
 import type { AlertOutput, Sound } from '../platform/alert-output';
-import { createAlertsPanel, type AlertKey } from './alerts-panel';
 import { copy, type Copy } from './copy';
 import { el } from './dom';
+import { icon } from './icons';
+import { createSettingsView, type AlertKey } from './settings-view';
 
 export interface AppDeps {
   store: KeyValueStore;
@@ -45,41 +46,70 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   let disposed = false;
   let finishedCount = 0;
   let accountLine: HTMLElement | null = null;
+  let view: 'main' | 'settings' = 'main';
+  // True while the history holds the entry pushed by opening settings.
+  let settingsEntry = false;
 
   const language = (): Language => settings.language ?? deps.deviceLanguage;
   const text = (): Copy => copy[language()];
 
   const top = el('div');
   const list = el('div');
-  const pasteButton = el('button', { type: 'button', 'data-action': 'paste' }, text().paste);
-  const box = el('textarea', {
-    name: 'export', rows: '3', placeholder: text().placeholder, 'aria-label': text().placeholder,
-    autocomplete: 'off', spellcheck: 'false',
-  });
+  const title = el('h1');
+  const settingsButton = el('button', { type: 'button', 'data-action': 'settings' });
+  settingsButton.append(icon('settings'));
+  const header = el('div', { class: 'top' });
+  header.append(title, settingsButton);
+  const pasteButton = el('button', { type: 'button', 'data-action': 'paste' });
+  const box = el('textarea', { name: 'export', rows: '3', autocomplete: 'off', spellcheck: 'false' });
   const controls = el('div', { class: 'controls' });
   controls.append(pasteButton, box);
 
-  const panel = createAlertsPanel({
+  const settingsView = createSettingsView({
     onToggle: (key, on) => onToggle(key, on),
+    onLanguage: (lang) => onLanguage(lang),
     onTest: () => {
       if (anyAlertOn(settings)) {
         void fireAlert({ title: text().alerts.testTitle, body: text().alerts.testBody });
       }
     },
-  }, text());
-  panel.update(settings);
+    onDelete: () => onDelete(),
+    onBack: () => leaveSettings(),
+  });
 
+  // Footer text is set by applyStaticText, because it changes with the language. Relative hrefs so the
+  // links also work when the app is served from a sub-path (GitHub Pages).
   const footer = el('footer');
-  const credit = el('p');
-  const voiceCreditVi = el('p');
-  const voiceCreditEn = el('p');
-  // Relative hrefs so the links also work when the app is served from a sub-path (GitHub Pages).
-  credit.append(el('a', { href: 'licenses/clash-of-clans-data.txt' }, text().credit));
-  voiceCreditVi.append(el('a', { href: 'licenses/vais1000-voice.txt' }, text().voiceCreditVi));
-  voiceCreditEn.append(el('a', { href: 'licenses/lj-speech-voice.txt' }, text().voiceCreditEn));
-  footer.append(el('p', {}, text().privacy), el('p', {}, text().disclaimer), credit, voiceCreditVi, voiceCreditEn);
+  const privacy = el('p');
+  const disclaimer = el('p');
+  const credit = el('a', { href: 'licenses/clash-of-clans-data.txt' });
+  const voiceCreditVi = el('a', { href: 'licenses/vais1000-voice.txt' });
+  const voiceCreditEn = el('a', { href: 'licenses/lj-speech-voice.txt' });
+  const links = [credit, voiceCreditVi, voiceCreditEn].map((link) => {
+    const line = el('p');
+    line.append(link);
+    return line;
+  });
+  footer.append(privacy, disclaimer, ...links);
 
-  root.replaceChildren(el('h1', {}, text().title), top, controls, panel.element, list, footer);
+  const mainView = el('div', { 'data-view': 'main' });
+  mainView.append(header, top, controls, list, footer);
+  root.replaceChildren(mainView, settingsView.element);
+
+  // Text that is built once and must still follow the language, including attributes.
+  function applyStaticText(): void {
+    const t = text();
+    title.textContent = t.title;
+    settingsButton.setAttribute('aria-label', t.settings.open);
+    pasteButton.textContent = t.paste;
+    box.setAttribute('placeholder', t.placeholder);
+    box.setAttribute('aria-label', t.placeholder);
+    privacy.textContent = t.privacy;
+    disclaimer.textContent = t.disclaimer;
+    credit.textContent = t.credit;
+    voiceCreditVi.textContent = t.voiceCreditVi;
+    voiceCreditEn.textContent = t.voiceCreditEn;
+  }
 
   const active = (): Village | undefined => (state.activeTag === null ? undefined : state.villages[state.activeTag]);
   const accountText = (village: Village) => {
@@ -116,12 +146,11 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   // the wrong element. By click time the target has already been hit. Removes only the notice node:
   // a full render() would also replace the tab and delete buttons.
   const recheckActivation = (): void => {
-    if (!needsTap()) top.querySelector('[data-notice="needs-tap"]')?.remove();
+    if (!needsTap()) root.querySelector('[data-notice="needs-tap"]')?.remove();
   };
 
   function applySetting(key: AlertKey, on: boolean): void {
     settings = { ...settings, [key]: on };
-    panel.update(settings);
     persistSettings();
     render();
   }
@@ -129,13 +158,13 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
   async function enableBanner(): Promise<void> {
     let permission = deps.output.bannerPermission();
     if (permission === 'default') {
-      panel.lockBanner(true);
+      settingsView.lockBanner(true);
       try {
         permission = await deps.output.requestBannerPermission();
       } catch {
         permission = 'denied';
       } finally {
-        panel.lockBanner(false);
+        settingsView.lockBanner(false);
       }
       if (disposed) return;
     }
@@ -144,8 +173,49 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
       return;
     }
     bannerDenied = true;
-    panel.update(settings);
     render();
+  }
+
+  function onLanguage(lang: Language): void {
+    settings = { ...settings, language: lang };
+    persistSettings();
+    render();
+  }
+
+  function onDelete(): void {
+    if (state.activeTag === null) return;
+    state = removeVillage(state, state.activeTag);
+    resetMessages();
+    persist();
+    leaveSettings();
+    render();
+  }
+
+  // Both views exist in the page; the other one is hidden. Focus moves only after the view is shown,
+  // because browsers ignore focus() on a hidden element.
+  function openSettings(): void {
+    if (view === 'settings') return;
+    view = 'settings';
+    history.pushState({ view: 'settings' }, '');
+    settingsEntry = true;
+    render();
+    settingsView.focusBack();
+  }
+
+  function closeSettings(): void {
+    if (view !== 'settings') return;
+    view = 'main';
+    settingsEntry = false;
+    render();
+    settingsButton.focus();
+  }
+
+  // The in-app way out: closes at once, then removes the history entry that opening added. The popstate
+  // that follows finds the screen already closed and does nothing.
+  function leaveSettings(): void {
+    const hadEntry = settingsEntry;
+    closeSettings();
+    if (hadEntry) history.back();
   }
 
   function onToggle(key: AlertKey, on: boolean): void {
@@ -196,9 +266,26 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
     keptNewer = false;
   }
 
+  // The notices caused by what happens in settings. They are shown on whichever screen is open, so each
+  // one has exactly one element in the page.
+  function alertNotices(): HTMLElement[] {
+    const t = text();
+    const nodes: HTMLElement[] = [];
+    if (stateSaveFailed || settingsSaveFailed) nodes.push(notice('storage', t.notice.storage));
+    if (needsTap()) nodes.push(notice('needs-tap', t.notice['needs-tap']));
+    if (bannerDenied) nodes.push(notice('banner-denied', t.notice['banner-denied']));
+    if (soundFailed) nodes.push(notice('sound-failed', t.notice['sound-failed']));
+    return nodes;
+  }
+
   function render(): void {
     const lang = language();
     document.documentElement.lang = lang;
+    applyStaticText();
+    mainView.hidden = view !== 'main';
+    settingsView.element.hidden = view !== 'settings';
+    settingsView.update({ settings, lang, hasAccount: active() !== undefined });
+    settingsView.notices.replaceChildren(...(view === 'settings' ? alertNotices() : []));
     const t = text();
     const village = active();
     const now = deps.now();
@@ -221,19 +308,16 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
     }
     accountLine = null;
     if (village) {
-      const header = el('div', { class: 'account' });
+      const row = el('div', { class: 'account' });
       accountLine = el('span', {}, accountText(village));
-      header.append(accountLine, el('button', { type: 'button', 'data-action': 'delete' }, t.delete));
-      topNodes.push(header, el('p', { class: 'hint' }, t.staleHint));
+      row.append(accountLine);
+      topNodes.push(row, el('p', { class: 'hint' }, t.staleHint));
     }
     if (errorText !== null) topNodes.push(notice('error', errorText));
     if (keptNewer) topNodes.push(notice('kept-newer', t.notice['kept-newer']));
-    if (stateSaveFailed || settingsSaveFailed) topNodes.push(notice('storage', t.notice.storage));
+    if (view === 'main') topNodes.push(...alertNotices());
     if (unreadable) topNodes.push(notice('unreadable', t.notice.unreadable));
     if (village && allFinished(village.jobs, now)) topNodes.push(notice('all-finished', t.notice['all-finished']));
-    if (needsTap()) topNodes.push(notice('needs-tap', t.notice['needs-tap']));
-    if (bannerDenied) topNodes.push(notice('banner-denied', t.notice['banner-denied']));
-    if (soundFailed) topNodes.push(notice('sound-failed', t.notice['sound-failed']));
     if (village?.hasBoosts) topNodes.push(notice('boost', t.notice.boost));
     if (village && deviceClockBehind(village.exportedAt, now)) topNodes.push(notice('clock', t.notice.clock));
     top.replaceChildren(...topNodes);
@@ -272,11 +356,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
       render();
       return;
     }
-    const firstAccount = Object.keys(state.villages).length === 0;
     const { state: next, outcome } = upsertVillage(state, result.village);
     state = next;
-    // A one-time hint after the very first paste, for people who have not chosen any alert yet.
-    if (outcome === 'added' && firstAccount && !anyAlertOn(settings)) panel.open();
     keptNewer = outcome === 'kept-newer';
     unreadable = false;
     persist();
@@ -325,8 +406,6 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
     const tag = target.closest<HTMLElement>('button[data-tag]')?.dataset.tag;
     if (tag !== undefined) {
       state = { ...state, activeTag: tag };
-    } else if (target.closest('button[data-action="delete"]') && state.activeTag !== null) {
-      state = removeVillage(state, state.activeTag);
     } else {
       return;
     }
@@ -335,13 +414,17 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
     render();
   };
   const onPasteClick = (): void => { void onPaste(); };
+  const onSettingsClick = (): void => openSettings();
+  const onPopState = (): void => closeSettings();
   const onInput = (): void => {
     if (box.value.trim() !== '') handleText(box.value);
   };
 
   root.addEventListener('click', onClick);
   pasteButton.addEventListener('click', onPasteClick);
+  settingsButton.addEventListener('click', onSettingsClick);
   box.addEventListener('input', onInput);
+  window.addEventListener('popstate', onPopState);
   document.addEventListener('visibilitychange', tick);
   for (const type of ['click', 'keydown']) document.addEventListener(type, recheckActivation);
   const timer = setInterval(tick, 1000);
@@ -355,6 +438,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): () => void {
     for (const type of ['click', 'keydown']) document.removeEventListener(type, recheckActivation);
     root.removeEventListener('click', onClick);
     pasteButton.removeEventListener('click', onPasteClick);
+    settingsButton.removeEventListener('click', onSettingsClick);
     box.removeEventListener('input', onInput);
+    window.removeEventListener('popstate', onPopState);
   };
 }

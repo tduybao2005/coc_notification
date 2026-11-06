@@ -37,8 +37,14 @@ const rows = (root: HTMLElement) => [...root.querySelectorAll('li[data-ends-at]'
 const row = (root: HTMLElement, name: string) => rows(root).find((r) => r.textContent!.includes(name))!;
 const remaining = (r: Element) => r.querySelector('.job-remaining')!.textContent;
 
-beforeEach(() => { vi.useFakeTimers(); store = memoryStore(); });
-afterEach(() => { unmount?.(); vi.useRealTimers(); });
+// jsdom runs history.back on a real timer outside fake timers, so its popstate could land in the next test.
+let historyBack: ReturnType<typeof vi.spyOn>;
+beforeEach(() => {
+  vi.useFakeTimers();
+  store = memoryStore();
+  historyBack = vi.spyOn(history, 'back').mockImplementation(() => {});
+});
+afterEach(() => { unmount?.(); historyBack.mockRestore(); vi.useRealTimers(); });
 
 test('first visit shows how to export and the legal footer', async () => {
   const root = await setup(T * 1000);
@@ -199,7 +205,6 @@ const staggered = async () => JSON.stringify({ tag: '#TEST123', timestamp: T, bu
   { data: 1000026, lvl: 1, timer: 100 }, { data: 1000059, lvl: 1, timer: 103 }] });
 const notice = (root: HTMLElement, kind: string) => root.querySelector(`[data-notice="${kind}"]`);
 const input = (root: HTMLElement, name: string) => root.querySelector(`input[name="${name}"]`) as HTMLInputElement;
-const summary = (root: HTMLElement) => root.querySelector('details[data-role="alerts"] summary')!.textContent!;
 
 async function pasted(clockMs: number, opts: Parameters<typeof setup>[1] = {}) {
   const root = await setup(clockMs, opts);
@@ -395,7 +400,6 @@ test('permission revoked since last time shows as off', async () => {
   const output = fakeOutput({ bannerPermission: () => 'denied' });
   const root = await setup(T * 1000, { output, settings: on({ banner: true }) });
   expect(input(root, 'alert-banner').checked).toBe(false);
-  expect(summary(root)).toContain('Đang tắt');
 });
 
 test('a failed settings save shows the storage notice', async () => {
@@ -404,13 +408,6 @@ test('a failed settings save shows the storage notice', async () => {
   await flush();
   expect(notice(root, 'storage')).not.toBeNull();
   expect(input(root, 'alert-ting').checked).toBe(true);
-});
-
-test('the summary follows the switches', async () => {
-  const root = await setup(T * 1000);
-  expect(summary(root)).toContain('Đang tắt');
-  click(root, 'input[name="alert-ting"]');
-  expect(summary(root)).toContain('Đang bật');
 });
 
 test('all-finished notice ignores helpers', async () => {
@@ -475,21 +472,6 @@ test('no needs-tap when only the banner is on', async () => {
   expect(notice(root, 'needs-tap')).toBeNull();
 });
 
-test('details opens after the first paste only', async () => {
-  let clip = sample;
-  const root = await setup((T + 807) * 1000, { clip: async () => clip });
-  const details = root.querySelector('details[data-role="alerts"]') as HTMLDetailsElement;
-  expect(details.open).toBe(false);
-  click(root, 'button[data-action="paste"]');
-  await flush();
-  expect(details.open).toBe(true);
-  details.open = false;
-  clip = JSON.stringify({ tag: '#OTHER1', timestamp: T, buildings: [] });
-  click(root, 'button[data-action="paste"]');
-  await flush();
-  expect(details.open).toBe(false);
-});
-
 test('the test button fires the enabled kinds', async () => {
   const output = fakeOutput();
   const root = await setup(T * 1000, { output, settings: on({ ting: true }) });
@@ -531,7 +513,7 @@ const VIETNAMESE = /[ăâđêôơưàáạảãèéẹẻẽìíịỉĩòóọ�
 
 test('english mode shows no Vietnamese, pasted data included', async () => {
   const root = await pasted((T + 807) * 1000, { deviceLanguage: 'en' });
-  expect(root.textContent).not.toMatch(VIETNAMESE);
+  expect(root.querySelector('[data-view="main"]')!.textContent).not.toMatch(VIETNAMESE);
   expect(document.documentElement.lang).toBe('en');
   expect(row(root, 'Workshop').querySelector('.job-detail')!.textContent).toBe('Level 6 → 7');
 });
@@ -547,4 +529,185 @@ test('a finished job alerts in the current language', async () => {
   await pasted((T + 54757) * 1000, { output, deviceLanguage: 'en', settings: on({ banner: true }) });
   await vi.advanceTimersByTimeAsync(5000);
   expect(output.calls).toEqual(['banner:Workshop finished']);
+});
+
+const screen = (root: HTMLElement) => root.querySelector('[data-view]:not([hidden])')!.getAttribute('data-view');
+const openSettings = (root: HTMLElement) => click(root, 'button[data-action="settings"]');
+const input2 = (root: HTMLElement, value: string) =>
+  root.querySelector(`input[name="language"][value="${value}"]`) as HTMLInputElement;
+
+test('settings opens and closes with its buttons, and focus follows', async () => {
+  const root = await setup(T * 1000);
+  expect(screen(root)).toBe('main');
+  openSettings(root);
+  expect(screen(root)).toBe('settings');
+  expect(document.activeElement).toBe(root.querySelector('button[data-action="back"]'));
+  click(root, 'button[data-action="back"]');
+  expect(screen(root)).toBe('main');
+  expect(document.activeElement).toBe(root.querySelector('button[data-action="settings"]'));
+});
+
+test('opening settings adds one history entry and the back button removes it', async () => {
+  const root = await setup(T * 1000);
+  const push = vi.spyOn(history, 'pushState');
+  openSettings(root);
+  expect(push).toHaveBeenCalledWith({ view: 'settings' }, '');
+  expect(historyBack).not.toHaveBeenCalled();
+  click(root, 'button[data-action="back"]');
+  expect(historyBack).toHaveBeenCalledOnce();
+  push.mockRestore();
+});
+
+test('the system back button closes settings without touching history again', async () => {
+  const root = await setup(T * 1000);
+  openSettings(root);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+  expect(screen(root)).toBe('main');
+  expect(historyBack).not.toHaveBeenCalled();
+});
+
+test('the popstate after the in-app back button changes nothing', async () => {
+  const root = await setup(T * 1000);
+  openSettings(root);
+  click(root, 'button[data-action="back"]');
+  window.dispatchEvent(new PopStateEvent('popstate'));
+  expect(screen(root)).toBe('main');
+  openSettings(root);
+  expect(screen(root)).toBe('settings');
+});
+
+test('reloading inside settings starts on the main screen', async () => {
+  history.replaceState({ view: 'settings' }, '');
+  const root = await setup(T * 1000);
+  expect(screen(root)).toBe('main');
+  window.dispatchEvent(new PopStateEvent('popstate'));
+  expect(screen(root)).toBe('main');
+  history.replaceState(null, '');
+});
+
+test('picking a language applies at once and is saved', async () => {
+  const root = await pasted((T + 807) * 1000);
+  click(root, 'input[name="language"][value="en"]');
+  expect(root.querySelector('[data-view="main"]')!.textContent).not.toMatch(VIETNAMESE);
+  expect(document.documentElement.lang).toBe('en');
+  await flush();
+  expect((await loadSettings(store)).language).toBe('en');
+});
+
+test('a language change reaches every attribute and every built-once text', async () => {
+  const root = await setup(T * 1000);
+  const attr = (selector: string, name: string) => root.querySelector(selector)!.getAttribute(name);
+  expect(attr('button[data-action="settings"]', 'aria-label')).toBe('Cài đặt');
+  click(root, 'input[name="language"][value="en"]');
+  expect(attr('button[data-action="settings"]', 'aria-label')).toBe('Settings');
+  expect(attr('button[data-action="back"]', 'aria-label')).toBe('Back');
+  expect(attr('textarea[name="export"]', 'placeholder')).toBe('Or paste the data here');
+  expect(attr('textarea[name="export"]', 'aria-label')).toBe('Or paste the data here');
+  expect(root.querySelector('button[data-action="paste"]')!.textContent).toBe('Paste data');
+  expect(root.querySelector('footer')!.textContent).toContain('Data stays on this device');
+  expect(root.querySelector('footer')!.textContent).toContain('English voice');
+  expect(root.querySelector('footer')!.textContent).not.toMatch(VIETNAMESE);
+  expect(root.querySelector('[data-view="settings"] h2')!.textContent).toBe('Language');
+  click(root, 'input[name="language"][value="vi"]');
+  expect(attr('button[data-action="settings"]', 'aria-label')).toBe('Cài đặt');
+  expect(attr('textarea[name="export"]', 'placeholder')).toBe('Hoặc dán dữ liệu vào đây');
+  expect(root.querySelector('button[data-action="paste"]')!.textContent).toBe('Dán dữ liệu');
+});
+
+test('the language follows the device until one is picked', async () => {
+  const root = await setup(T * 1000, { deviceLanguage: 'en' });
+  expect(input2(root, 'en').checked).toBe(true);
+  expect(input2(root, 'vi').checked).toBe(false);
+  await flush();
+  expect((await loadSettings(store)).language).toBeNull();
+});
+
+test('a language change during the ting leaves that alert in its own language', async () => {
+  let release!: (ok: boolean) => void;
+  const played: string[] = [];
+  const output = fakeOutput({ play: (sound) => {
+    played.push(sound);
+    return sound === 'ting' ? new Promise((r) => { release = r; }) : Promise.resolve(true);
+  } });
+  const root = await pasted((T + 54757) * 1000, { output, settings: on({ ting: true, voice: true }) });
+  await vi.advanceTimersByTimeAsync(5000);
+  click(root, 'input[name="language"][value="en"]');
+  release(true);
+  await flush();
+  expect(played).toEqual(['ting', 'voice-vi']);
+});
+
+test('a refused permission shows its notice on the settings screen', async () => {
+  const output = fakeOutput({ bannerPermission: () => 'default', requestBannerPermission: async () => 'denied' });
+  const root = await setup(T * 1000, { output });
+  openSettings(root);
+  click(root, 'input[name="alert-banner"]');
+  await flush();
+  expect(root.querySelector('[data-view="settings"] [data-notice="banner-denied"]')).not.toBeNull();
+  expect(root.querySelectorAll('[data-notice="banner-denied"]')).toHaveLength(1);
+});
+
+test('a sound failure on the test button shows on the settings screen', async () => {
+  const output = fakeOutput({ play: async () => false });
+  const root = await setup(T * 1000, { output, settings: on({ ting: true }) });
+  openSettings(root);
+  click(root, 'button[data-action="test-alert"]');
+  await flush();
+  expect(root.querySelector('[data-view="settings"] [data-notice="sound-failed"]')).not.toBeNull();
+});
+
+test('alert notices move back to the main screen', async () => {
+  const output = fakeOutput({ play: async () => false });
+  const root = await setup(T * 1000, { output, settings: on({ ting: true }) });
+  openSettings(root);
+  click(root, 'button[data-action="test-alert"]');
+  await flush();
+  click(root, 'button[data-action="back"]');
+  expect(root.querySelector('[data-view="main"] [data-notice="sound-failed"]')).not.toBeNull();
+  expect(root.querySelectorAll('[data-notice="sound-failed"]')).toHaveLength(1);
+});
+
+test('a failed language save warns and still applies', async () => {
+  const root = await setup(T * 1000, { store: memoryStore({}, { failWrites: true }) });
+  click(root, 'input[name="language"][value="en"]');
+  await flush();
+  expect(notice(root, 'storage')).not.toBeNull();
+  expect(document.documentElement.lang).toBe('en');
+});
+
+test('delete sits on the settings screen, only with an account', async () => {
+  const root = await setup((T + 807) * 1000);
+  expect(root.querySelector('button[data-action="delete"]')).toBeNull();
+  click(root, 'button[data-action="paste"]');
+  await flush();
+  expect(root.querySelector('[data-view="settings"] button[data-action="delete"]')).not.toBeNull();
+  expect(root.querySelector('[data-view="main"] button[data-action="delete"]')).toBeNull();
+});
+
+test('deleting returns to the main screen and closes the history entry', async () => {
+  const root = await pasted((T + 807) * 1000);
+  openSettings(root);
+  click(root, 'button[data-action="delete"]');
+  expect(screen(root)).toBe('main');
+  expect(rows(root)).toHaveLength(0);
+  expect(historyBack).toHaveBeenCalledOnce();
+});
+
+test('choosing the language that is already shown still saves it', async () => {
+  const root = await setup(T * 1000, { deviceLanguage: 'en' });
+  click(root, 'input[name="language"][value="en"]');
+  await flush();
+  expect((await loadSettings(store)).language).toBe('en');
+});
+
+test('needs-tap on the settings screen clears on the next click', async () => {
+  let active = false;
+  const output = fakeOutput({ hasUserActivation: () => active });
+  const root = await setup(T * 1000, { output, settings: on({ ting: true }) });
+  openSettings(root);
+  expect(root.querySelector('[data-view="settings"] [data-notice="needs-tap"]')).not.toBeNull();
+  expect(root.querySelectorAll('[data-notice="needs-tap"]')).toHaveLength(1);
+  active = true;
+  document.dispatchEvent(new Event('click'));
+  expect(notice(root, 'needs-tap')).toBeNull();
 });
